@@ -1,44 +1,44 @@
-name: Build Fox RP (Clean Edition)
+name: Build APK
+
 on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    - uses: actions/checkout@v3
+    
+    - name: Set up JDK 11
+      uses: actions/setup-java@v3
+      with:
+        java-version: '11'
+        distribution: 'temurin'
+        cache: gradle
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
 
-      - name: Remove BR Branding & Inject Pastebin
-        run: |
-          # 1. Массовая замена ссылок на твой Pastebin во всем коде (Java и Kotlin)
-          # Мы заменяем их API и CDN на твой конфиг
-          find . -type f \( -name "*.java" -o -name "*.kt" -o -name "*.xml" \) -exec sed -i 's|https://api.blackrussia.online|https://pastebin.com/raw/rSHgfpgz|g' {} +
-          find . -type f \( -name "*.java" -o -name "*.kt" -o -name "*.xml" \) -exec sed -i 's|https://cdn.blackrussia.online|https://pastebin.com/raw/rSHgfpgz|g' {} +
-          
-          # 2. Очистка тяжелых изображений (логотипы, фоны)
-          # Вместо удаления создаем пустые картинки 1x1, чтобы билд не сломался
-          find app/src/main/res/drawable* -name "*logo*" -exec echo "" > {} \;
-          find app/src/main/res/drawable* -name "*bg*" -exec echo "" > {} \;
-          find app/src/main/res/drawable* -name "*background*" -exec echo "" > {} \;
+    - name: Build with Gradle
+      run: ./gradlew build assembleDebug
+      
+    - name: Upload APK
+      uses: actions/upload-artifact@v3
+      with:
+        name: app-debug
+        path: app/build/outputs/apk/debug/*.apk
+        retention-days: 30
 
-          # 3. Смена названия
-          find app/src/main/res/values -name "strings.xml" -exec sed -i 's/BLACK RUSSIA/Fox RP/g' {} +
-
-      - name: Build APK
-        run: |
-          chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
-
-      - name: Upload
-        uses: actions/upload-artifact@v4
-        with:
-          name: Fox-RP-BR-Clean
-          path: app/build/outputs/apk/debug/*.apk
-          
+    - name: Create Release
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: softprops/action-gh-release@v1
+      with:
+        files: app/build/outputs/apk/debug/*.apk
+        tag_name: v${{ github.run_number }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
