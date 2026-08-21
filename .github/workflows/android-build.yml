@@ -30,16 +30,50 @@ jobs:
         uses: android-actions/setup-android@v3
       
       - name: Install Android SDK packages
-        run: sdkmanager "platforms;android-30" "build-tools;30.0.1"
+        run: |
+          sdkmanager "platforms;android-30" "build-tools;30.0.1" "ndk;21.4.7075529"
+
+      - name: Create fake google-services.json
+        run: |
+          mkdir -p app/
+          cat > app/google-services.json << 'EOF'
+          {
+            "project_info": {
+              "project_number": "123456789",
+              "project_id": "fake-project",
+              "storage_bucket": "fake-project.appspot.com"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:123456789:android:1234567890abcdef",
+                  "android_client_info": {
+                    "package_name": "com.parad1stgames.game"
+                  }
+                },
+                "api_key": [
+                  {
+                    "current_key": "fake-api-key"
+                  }
+                ],
+                "services": {
+                  "appinvite_service": {
+                    "status": 1
+                  }
+                }
+              }
+            ]
+          }
+          EOF
 
       - name: Build release APK
         run: |
           chmod +x ./gradlew
-          ./gradlew clean :app:assembleVerRelease --no-daemon --stacktrace
+          ./gradlew clean :app:assembleRelease --no-daemon --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: samp-mobile-release
-          path: app/build/outputs/apk/ver/release/*.apk
+          name: black-russia-release
+          path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
