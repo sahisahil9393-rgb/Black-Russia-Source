@@ -35,7 +35,7 @@ jobs:
       - name: Build release APK
         run: |
           chmod +x ./gradlew
-          ./gradlew :app:assembleVerRelease --no-daemon --stacktrace
+          ./gradlew clean :app:assembleVerRelease --no-daemon --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
