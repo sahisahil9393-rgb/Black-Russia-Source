@@ -128,11 +128,11 @@ jobs:
       - name: Build release APK
         run: |
           chmod +x ./gradlew
-          ./gradlew :app:assembleVer_release --no-daemon --stacktrace
+          ./gradlew :app:assembleVerRelease --no-daemon --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: samp-mobile-release
-          path: app/build/outputs/apk/**77/*.apk
+          path: app/build/outputs/apk/ver/release/*.apk
           if-no-files-found: error
