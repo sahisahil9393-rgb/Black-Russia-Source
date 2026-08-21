@@ -1,5 +1,14 @@
 [
     {
+      "color": "00FF00",
+      "dopname": "(CRMP LITE)",
+      "maxonline": 100,
+      "name": "Sahil",
+      "online": 0,
+      "ip": "94.23.168.153",
+      "port": 2144
+    },
+    {
       "color": "FF0000",
       "dopname": "(X999 АКЦИИ)",
       "maxonline": 1000,
