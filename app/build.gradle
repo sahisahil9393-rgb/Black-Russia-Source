@@ -4,7 +4,6 @@ apply plugin: 'com.google.firebase.crashlytics'
 
 
 android {
-    //compileSdkVersion 33
     compileSdkVersion 30
     buildToolsVersion "30.0.1"
 
@@ -19,10 +18,6 @@ android {
         vectorDrawables.useSupportLibrary = true
 
         multiDexEnabled = true
-
-        ndk {
-            abiFilters 'armeabi-v7a'
-        }
     }
 
     flavorDimensions "version"
@@ -44,14 +39,9 @@ android {
         }
     }
 
-    externalNativeBuild {
-        cmake {
-            path "src/main/cpp/CMakeLists.txt"
-        }
-    }
-
     lintOptions {
         checkReleaseBuilds false
+        disableWarnings true
     }
 
     compileOptions {
