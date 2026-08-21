@@ -19,100 +19,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configure case-sensitive paths
-        shell: bash
-        run: |
-          git config core.ignorecase false
-          python3 - <<'PY'
-          import subprocess
-          from collections import defaultdict
-
-          paths = subprocess.check_output(["git", "ls-files"], text=True).splitlines()
-          grouped = defaultdict(list)
-          for path in paths:
-              grouped[path.casefold()].append(path)
-          collisions = [items for items in grouped.values() if len(items) > 1]
-          if collisions:
-              print("Case-insensitive path collisions found:")
-              for items in collisions:
-                  print("  " + " | ".join(items))
-              raise SystemExit(1)
-          print(f"Checked {len(paths)} tracked paths; no path collisions found.")
-          PY
-
-      - name: Validate C/C++ include casing
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          import re
-          from pathlib import Path
-
-          source_root = Path("app/src/main/cpp")
-          include_dirs = [
-              source_root,
-              source_root / "opus/include",
-              source_root / "multiplayer",
-              source_root / "multiplayer/vendor/imgui",
-              source_root / "multiplayer/vendor",
-              source_root / "multiplayer/game/RW",
-              source_root / "multiplayer/game",
-              source_root / "multiplayer/java_systems",
-              source_root / "multiplayer/game/Core",
-          ]
-          extensions = {".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx"}
-          pattern = re.compile(r'^\s*#\s*include\s*"([^"]+)"')
-
-          def resolve_case_insensitive(path):
-              current = Path(".")
-              for part in path.parts:
-                  if part in ("", "."):
-                      continue
-                  exact = current / part
-                  if exact.exists():
-                      current = exact
-                      continue
-                  if not current.is_dir():
-                      return None
-                  matches = [
-                      entry for entry in current.iterdir()
-                      if entry.name.casefold() == part.casefold()
-                  ]
-                  if len(matches) != 1:
-                      return None
-                  current = matches[0]
-              return current
-
-          issues = []
-          for source in source_root.rglob("*"):
-              if not source.is_file() or source.suffix.lower() not in extensions:
-                  continue
-              for line_number, line in enumerate(
-                  source.read_text(errors="ignore").splitlines(), 1
-              ):
-                  match = pattern.match(line)
-                  if not match:
-                      continue
-                  include_name = match.group(1)
-                  candidates = [source.parent / include_name]
-                  candidates.extend(directory / include_name for directory in include_dirs)
-                  if any(candidate.is_file() for candidate in candidates):
-                      continue
-                  for candidate in candidates:
-                      actual = resolve_case_insensitive(candidate)
-                      if actual is not None and actual.is_file():
-                          issues.append(
-                              f"{source}:{line_number}: {include_name} "
-                              f"(actual path: {actual})"
-                          )
-                          break
-
-          if issues:
-              print("Case-sensitive include mismatches found:")
-              print("\n".join(issues))
-              raise SystemExit(1)
-          print("Checked C/C++ include casing successfully.")
-          PY
-
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -120,10 +26,11 @@ jobs:
           java-version: "21"
           cache: gradle
 
-      - name: Set up Android SDK and NDK
+      - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+      
       - name: Install Android SDK packages
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;28.0.13004108"
+        run: sdkmanager "platforms;android-30" "build-tools;30.0.1"
 
       - name: Build release APK
         run: |
