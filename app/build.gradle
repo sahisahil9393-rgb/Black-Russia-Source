@@ -1,0 +1,113 @@
+apply plugin: 'com.android.application'
+apply plugin: 'com.google.gms.google-services'
+apply plugin: 'com.google.firebase.crashlytics'
+
+android {
+    compileSdkVersion 33
+    buildToolsVersion "33.0.2"
+
+    defaultConfig {
+        minSdk 21
+        targetSdkVersion 33
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+        applicationId 'com.parad1stgames.game'
+        versionName "0.1.0"
+        versionCode 1
+        vectorDrawables.useSupportLibrary = true
+
+        multiDexEnabled = true
+    }
+
+    signingConfigs {
+        release {
+            storeFile file("edgar.jks")
+            storePassword "edgar333"
+            keyAlias "key0"
+            keyPassword "edgar333"
+        }
+    }
+
+    flavorDimensions "version"
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
+        }
+        debug {
+            debuggable true
+        }
+    }
+
+    productFlavors {
+        ver {
+            dimension "version"
+            applicationIdSuffix ".ver"
+        }
+    }
+
+    lintOptions {
+        checkReleaseBuilds false
+        disable 'MissingTranslation', 'ExtraTranslation'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    packagingOptions {
+        pickFirst 'META-INF/proguard/androidx-*.pro'
+    }
+}
+
+dependencies {
+    implementation fileTree(dir: "libs", include: ["*.jar"])
+
+    // AndroidX
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+
+    // Material
+    implementation 'com.google.android.material:material:1.9.0'
+
+    // UI Libraries
+    implementation 'com.tuyenmonkey:mkloader:1.4.0'
+    implementation 'com.github.Triggertrap:SeekArc:v1.1'
+    implementation 'com.akexorcist:round-corner-progress-bar:2.1.2'
+    implementation 'io.github.dinuscxj:circleprogressbar:1.4.1'
+    implementation 'com.makeramen:roundedimageview:2.3.0'
+    implementation 'com.github.smarteist:Android-Image-Slider:1.4.0'
+
+    // Image Loading
+    implementation 'com.github.bumptech.glide:glide:4.15.1'
+    annotationProcessor 'com.github.bumptech.glide:compiler:4.15.1'
+
+    // Networking
+    implementation 'com.squareup.retrofit2:retrofit:2.9.0'
+    implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
+
+    // Utilities
+    implementation group: 'org.ini4j', name: 'ini4j', version: '0.5.4'
+    implementation 'com.github.arefbhrn:MaskedEditText:1.0.0'
+    implementation "com.github.skydoves:colorpickerpreference:2.0.4"
+    implementation 'com.github.pedromassango:doubleClick:v1.1'
+
+    // Download Manager
+    implementation 'com.github.amitshekhariitbhu:PRDownloader:1.0.2'
+    implementation 'com.liulishuo.filedownloader:library:1.7.7'
+
+    // Compression — FIXED: was AndroidP7zip (wrong API), now AndroidUn7zip (matches IExtractCallback)
+    implementation 'com.github.hzy3774:AndroidUn7zip:v1.7.2'
+
+    // Firebase
+    implementation platform('com.google.firebase:firebase-bom:32.2.0')
+    implementation 'com.google.firebase:firebase-database'
+    implementation 'com.google.firebase:firebase-crashlytics'
+    implementation 'com.google.firebase:firebase-analytics'
+
+    // Testing
+    testImplementation 'junit:junit:4.13.2'
+}
