@@ -79,7 +79,7 @@ jobs:
       - name: Build release APK
         run: |
           chmod +x ./gradlew
-          ./gradlew clean assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log
+          ./gradlew clean assembleRelease --no-daemon --refresh-dependencies --stacktrace 2>&1 | tee build.log
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/25.2.9519653
 
@@ -87,7 +87,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-log
+          name: build-log٨
           path: build.log
 
       - name: Upload APK
