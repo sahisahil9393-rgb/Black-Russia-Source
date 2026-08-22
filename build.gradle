@@ -1,76 +1,30 @@
-apply plugin: 'com.android.application'
-apply plugin: 'com.google.gms.google-services'
-apply plugin: 'com.google.firebase.crashlytics'
-
-android {
-    compileSdkVersion 33
-    buildToolsVersion "33.0.2"
-
-    defaultConfig {
-        minSdk 21
-        targetSdkVersion 33
-        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-
-        applicationId 'com.parad1stgames.game'
-        versionName "0.1.0"
-        versionCode 1
-        vectorDrawables.useSupportLibrary = true
-
-        multiDexEnabled = true
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
     }
-
-    flavorDimensions "version"
-
-    buildTypes {
-        release {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-        }
-        debug {
-            debuggable true
-        }
-    }
-
-    productFlavors {
-        ver {
-            dimension "version"
-            applicationIdSuffix ".ver"
-        }
-    }
-
-    lintOptions {
-        checkReleaseBuilds false
-        disable 'MissingTranslation', 'ExtraTranslation'
-    }
-
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
-    }
-
-    packagingOptions {
-        pickFirst 'META-INF/proguard/androidx-*.pro'
+    dependencies {
+        classpath 'com.android.tools.build:gradle:7.4.2'
+        classpath 'com.google.gms:google-services:4.3.15'
+        classpath 'com.google.firebase:firebase-crashlytics-gradle:2.9.9'
     }
 }
 
-dependencies {
-    implementation fileTree(dir: "libs", include: ["*.jar"])
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        maven { url "https://jitpack.io" }
+        jcenter() {
+            content {
+                includeGroup "com.tuyenmonkey"
+                includeGroup "com.liulishuo.filedownloader"
+            }
+        }
+    }
+}
 
-    // AndroidX
-    implementation 'androidx.appcompat:appcompat:1.6.1'
-    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
-
-    // Material
-    implementation 'com.google.android.material:material:1.9.0'
-
-    // UI Libraries
-    implementation 'com.tuyenmonkey:mkloader:1.4.0'
-    implementation 'com.github.Triggertrap:SeekArc:v1.1'
-    implementation 'com.akexorcist:round-corner-progress-bar:2.1.2'
-    implementation 'io.github.dinuscxj:circleprogressbar:1.4.1'
-    implementation 'com.makeramen:roundedimageview:2.3.0'
-    implementation 'com.github.smarteist:Android-Image-Slider:1.4.0'
-
-    // Image Loading
-    implementation 'com.github.bumptech.glide:glide:4.15.1'
-    annotationProcessor 'com.github
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}
