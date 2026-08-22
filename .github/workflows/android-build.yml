@@ -1,4 +1,4 @@
-name: Android APK
+name: Build MATRESHKARP
 
 on:
   workflow_dispatch:
@@ -7,10 +7,6 @@ on:
 
 permissions:
   contents: read
-
-concurrency:
-  group: android-build-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   build:
@@ -29,10 +25,17 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android SDK packages
+      - name: Install Android SDK + NDK + CMake
         run: |
-          sdkmanager "platforms;android-33" "build-tools;33.0.2" "ndk;21.4.7075529"
+          sdkmanager "platforms;android-34" "build-tools;34.0.0" "ndk;25.2.9519653" "cmake;3.22.1"
           sdkmanager --licenses < /dev/null || true
+
+      - name: Delete old keystore
+        run: rm -f app/edgar.jks
+
+      - name: Create debug keystore
+        run: |
+          keytool -genkey -v -keystore app/edgar.jks -alias key0 -keyalg RSA -keysize 2048 -validity 10000 -storepass edgar333 -keypass edgar333 -dname "CN=Debug, OU=Debug, O=Debug, L=Debug, S=Debug, C=US"
 
       - name: Create fake google-services.json
         run: |
@@ -49,7 +52,7 @@ jobs:
                 "client_info": {
                   "mobilesdk_app_id": "1:123456789:android:1234567890abcdef",
                   "android_client_info": {
-                    "package_name": "com.parad1stgames.game.ver"
+                    "package_name": "ru.edgar.space"
                   }
                 },
                 "api_key": [
@@ -67,14 +70,30 @@ jobs:
           }
           EOF
 
+      - name: Check BASS library exists
+        run: |
+          echo "Checking BASS libraries..."
+          ls -la app/src/main/cpp/vendor/bass/libs/ || echo "BASS libs folder not found"
+          find app/src/main/cpp -name "libbass.so" || echo "libbass.so not found anywhere"
+
       - name: Build release APK
         run: |
           chmod +x ./gradlew
-          ./gradlew clean :app:assembleVerRelease --no-daemon --stacktrace
+          ./gradlew clean assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/25.2.9519653
 
-      - name: Upload APK
+      - name: Upload build log (even if failed)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: black-russia-release
-          path: app/build/outputs/apk/ver/release/*.apk
+          name: build-log
+          path: build.log
+
+      - name: Upload APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: matreshka-release
+          path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
