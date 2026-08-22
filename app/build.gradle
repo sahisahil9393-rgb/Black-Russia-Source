@@ -99,8 +99,8 @@ dependencies {
     implementation 'com.github.amitshekhariitbhu:PRDownloader:1.0.2'
     implementation 'com.liulishuo.filedownloader:library:1.7.7'
 
-    // Compression — FIXED: use Maven Central coordinate with correct API (IExtractCallback)
-    implementation 'com.hzy:un7zip:1.6.0'
+    // Compression — REMOVED: AndroidP7zip/AndroidUn7zip not available in any repository
+    // Local IExtractCallback interface created instead (see app/src/main/java/com/hzy/lib7z/)
 
     // Firebase
     implementation platform('com.google.firebase:firebase-bom:32.2.0')
