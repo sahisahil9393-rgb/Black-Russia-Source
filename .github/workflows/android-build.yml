@@ -17,56 +17,56 @@ jobs:
       - name: Checkout your repo
         uses: actions/checkout@v4
 
-      # ── 2. Patch libsamp.so binary directly (NO ndk-build!) ──
-      - name: Patch libsamp.so binary
+      # ── 2. Find and patch ALL .so files ──
+      - name: Patch all .so binaries
         run: |
           IP="${{ env.SERVER_IP }}"
           PORT="${{ env.SERVER_PORT }}"
-          echo "Patching libsamp.so: $IP:$PORT"
+          echo "Patching all .so files for IP: $IP:$PORT"
 
           python3 << 'PYEOF'
+          import os
           import struct
-          import sys
 
-          SO_PATH = "app/src/main/jniLibs/armeabi-v7a/libsamp.so"
-          NEW_IP = b"94.23.168.153"
+          SO_DIR = "app/src/main/jniLibs/armeabi-v7a"
           OLD_IP = b"65.108.99.34"
+          NEW_IP = b"94.23.168.153"
+          OLD_PORT = struct.pack('<H', 2369)
+          NEW_PORT = struct.pack('<H', 2144)
 
-          with open(SO_PATH, "rb") as f:
-              data = bytearray(f.read())
+          patched_files = []
 
-          # Find and replace IP
-          count = data.count(OLD_IP)
-          print(f"Found {count} occurrences of old IP")
+          for filename in os.listdir(SO_DIR):
+              if not filename.endswith('.so'):
+                  continue
 
-          if count > 0:
-              # Pad new IP with null bytes to match old length
-              padded_ip = NEW_IP.ljust(len(OLD_IP), b'\x00')
-              data = data.replace(OLD_IP, padded_ip)
+              filepath = os.path.join(SO_DIR, filename)
+              with open(filepath, "rb") as f:
+                  data = bytearray(f.read())
 
-              with open(SO_PATH, "wb") as f:
-                  f.write(data)
-              print(f"Patched {count} IP addresses")
+              ip_count = data.count(OLD_IP)
+              port_count = data.count(OLD_PORT)
+
+              if ip_count > 0 or port_count > 0:
+                  if ip_count > 0:
+                      padded_ip = NEW_IP.ljust(len(OLD_IP), b'\x00')
+                      data = data.replace(OLD_IP, padded_ip)
+
+                  if port_count > 0:
+                      data = data.replace(OLD_PORT, NEW_PORT)
+
+                  with open(filepath, "wb") as f:
+                      f.write(data)
+
+                  patched_files.append(f"{filename}: IP={ip_count}, Port={port_count}")
+
+          if patched_files:
+              print("Patched files:")
+              for f in patched_files:
+                  print(f"  {f}")
           else:
-              print("Old IP not found — may already be patched or different format")
-
-          # Also try to find port 2369 (0x0941 in little-endian)
-          old_port = struct.pack('<H', 2369)
-          new_port = struct.pack('<H', 2144)
-
-          port_count = data.count(old_port)
-          if port_count > 0:
-              data = data.replace(old_port, new_port)
-              with open(SO_PATH, "wb") as f:
-                  f.write(data)
-              print(f"Patched {port_count} port addresses")
-          else:
-              print("Port not found in expected format")
-
-          print("Done!")
+              print("No old IP/Port found — may already be patched or different format")
           PYEOF
-
-          echo "libsamp.so patched"
 
       # ── 3. Java 17 + Android SDK ──
       - name: Set up Java
@@ -84,7 +84,7 @@ jobs:
           sdkmanager "platforms;android-34" "build-tools;34.0.0"
           sdkmanager --licenses < /dev/null || true
 
-      # ── 4. Keystore + APK (your original) ──
+      # ── 4. Keystore + APK ──
       - name: Delete old keystore
         run: rm -f app/edgar.jks
 
@@ -104,13 +104,6 @@ jobs:
         with:
           name: build-log
           path: build.log
-
-      - name: Upload libsamp.so
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: libsamp-so
-          path: app/src/main/jniLibs/armeabi-v7a/libsamp.so
 
       - name: Upload APK
         if: success()
