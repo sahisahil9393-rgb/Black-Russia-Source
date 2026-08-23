@@ -23,19 +23,29 @@ public class GTASA extends WarMedia {
             System.out.println("vmVersion " + vmVersion);
             System.loadLibrary("ImmEmulatorJ");
         } catch (ExceptionInInitializerError | UnsatisfiedLinkError e) {
+            System.err.println("Failed to load ImmEmulatorJ: " + e.getMessage());
         }
 
-        System.loadLibrary("GTASA");
-        System.loadLibrary("sampvoice");
+        try {
+            System.loadLibrary("GTASA");
+        } catch (UnsatisfiedLinkError e) {
+            System.err.println("Failed to load GTASA: " + e.getMessage());
+        }
+
+        try {
+            System.loadLibrary("sampvoice");
+        } catch (UnsatisfiedLinkError e) {
+            System.err.println("Failed to load sampvoice: " + e.getMessage());
+        }
     }
 
     public static void staticEnterSocialClub()
     {
-        gtasaSelf.EnterSocialClub();
+        if (gtasaSelf != null) gtasaSelf.EnterSocialClub();
     }
 
     public static void staticExitSocialClub() {
-        gtasaSelf.ExitSocialClub();
+        if (gtasaSelf != null) gtasaSelf.ExitSocialClub();
     }
 
     public void AfterDownloadFunction() {
