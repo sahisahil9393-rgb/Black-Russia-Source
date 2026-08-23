@@ -13,50 +13,80 @@ jobs:
   build:
     runs-on: ubuntu-20.04
     steps:
+      # ── 1. Checkout your repo (Jni source is already inside!) ──
       - name: Checkout your repo
         uses: actions/checkout@v4
 
+      # ── 2. Verify Jni source exists ──
+      - name: Verify Jni source exists
+        run: |
+          if [ ! -d "Jni source/jni" ]; then
+            echo "❌ ERROR: 'Jni source/' not found in your repo!"
+            echo "Add it: git clone https://github.com/Parad1st/Black-Russia-Source.git /tmp/p"
+            echo "        cp -r '/tmp/p/Jni source' ./"
+            echo "        git add 'Jni source' && git commit -m 'Add Jni source' && git push"
+            exit 1
+          fi
+          echo "✅ Jni source found"
+
+      # ── 3. Fix case sensitivity (Linux is case-sensitive, Windows was not) ──
       - name: Fix case sensitivity
         run: |
           cd "Jni source/jni/game"
           ln -s ccheckfilehash.h CCheckFileHash.h 2>/dev/null || true
           cd ../util
           sed -i 's/chatWindow.h/chatwindow.h/g' util.cpp
+          echo "Case sensitivity fixed"
 
+      # ── 4. Patch server IP/Port ──
       - name: Patch server IP/Port
         run: |
           IP="${{ env.SERVER_IP }}"
           PORT="${{ env.SERVER_PORT }}"
           SUM=$(echo "$IP" | awk -F. '{print $1+$2+$3+$4}')
           LEN=${#IP}
+          echo "Patching: $IP:$PORT (sum=$SUM, len=$LEN)"
           sed -i "s|CSetServer::create(\".*\", [0-9]\+, [0-9]\+, [0-9]\+, false)|CSetServer::create(\"$IP\", $SUM, $LEN, $PORT, false)|g" "Jni source/jni/clientlogic/CNetwork.cpp"
           grep "CSetServer::create" "Jni source/jni/clientlogic/CNetwork.cpp"
 
+      # ── 5. Download NDK r17c (last with gnustl_static) ──
       - name: Download NDK r17c
         run: |
           wget -q https://dl.google.com/android/repository/android-ndk-r17c-linux-x86_64.zip
           unzip -q android-ndk-r17c-linux-x86_64.zip
+          echo "NDK r17c ready"
 
+      # ── 6. Setup Java 8 (NDK r17c needs it) ──
       - name: Setup Java 8
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "8"
 
-      # FIX: Use -j1 instead of -j$(nproc) to prevent hanging
+      # ── 7. Build libsamp.so (clean build, single thread to avoid hanging) ──
       - name: Build libsamp.so
-        timeout-minutes: 45
+        timeout-minutes: 60
         run: |
           export ANDROID_NDK_HOME="$PWD/android-ndk-r17c"
           cd "Jni source"
           rm -rf obj libs
-          "$ANDROID_NDK_HOME/ndk-build" APP_ABI=armeabi-v7a -j1 V=1
-          ls -la libs/armeabi-v7a/libsamp.so
+          echo "Building with -j1 (single thread to avoid hanging)..."
+          "$ANDROID_NDK_HOME/ndk-build" APP_ABI=armeabi-v7a -j1 2>&1 | tee build.log
+          echo ""
+          echo "=== Checking output ==="
+          ls -la libs/armeabi-v7a/libsamp.so || echo "❌ libsamp.so NOT FOUND"
 
+      # ── 8. Replace libsamp.so ──
       - name: Replace libsamp.so
         run: |
-          cp "Jni source/libs/armeabi-v7a/libsamp.so" app/src/main/jniLibs/armeabi-v7a/libsamp.so
+          if [ -f "Jni source/libs/armeabi-v7a/libsamp.so" ]; then
+            cp "Jni source/libs/armeabi-v7a/libsamp.so" app/src/main/jniLibs/armeabi-v7a/libsamp.so
+            echo "✅ libsamp.so replaced"
+          else
+            echo "⚠️ Using original libsamp.so (build may have failed)"
+          fi
 
+      # ── 9. Java 17 + Android SDK (your original workflow) ──
       - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
@@ -72,6 +102,7 @@ jobs:
           sdkmanager "platforms;android-34" "build-tools;34.0.0"
           sdkmanager --licenses < /dev/null || true
 
+      # ── 10. Keystore + APK Build (your original workflow) ──
       - name: Delete old keystore
         run: rm -f app/edgar.jks
 
@@ -79,11 +110,17 @@ jobs:
         run: |
           keytool -genkey -v -keystore app/edgar.jks -alias key0 -keyalg RSA -keysize 2048 -validity 10000 -storepass edgar333 -keypass edgar333 -dname "CN=Debug, OU=Debug, O=Debug, L=Debug, S=Debug, C=US"
 
+      - name: Check BASS library exists
+        run: |
+          ls -la app/src/main/cpp/vendor/bass/libs/ || echo "BASS libs folder not found"
+          find app/src/main/cpp -name "libbass.so" || echo "libbass.so not found anywhere"
+
       - name: Build release APK
         run: |
           chmod +x ./gradlew
-          ./gradlew clean assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log
+          ./gradlew clean assembleRelease --no-daemon --refresh-dependencies --stacktrace 2>&1 | tee build.log
 
+      # ── 11. Upload artifacts (your original workflow) ──
       - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
