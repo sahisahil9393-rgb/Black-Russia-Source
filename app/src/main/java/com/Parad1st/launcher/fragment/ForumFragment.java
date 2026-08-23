@@ -25,7 +25,8 @@ public class ForumFragment extends Fragment {
         webView.getSettings().setJavaScriptEnabled(true);
         webView.getSettings().setLoadWithOverviewMode(false);
         webView.getSettings().setUseWideViewPort(false);
-        webView.getSettings().setAppCacheEnabled(true);
+        // REMOVED: setAppCacheEnabled was removed in Android API 33
+        // webView.getSettings().setAppCacheEnabled(true);
         webView.getSettings().setAllowContentAccess(true);
         webView.getSettings().setBuiltInZoomControls(true);
         webView.getSettings().setDisplayZoomControls(true);
