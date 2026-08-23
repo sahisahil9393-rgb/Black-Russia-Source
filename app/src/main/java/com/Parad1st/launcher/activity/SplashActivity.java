@@ -30,8 +30,6 @@ import com.byparad1st.launcher.model.Servers;
 import com.byparad1st.launcher.other.Interface;
 import com.byparad1st.launcher.other.Lists;
 
-import com.google.firebase.database.*;
-
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
@@ -39,26 +37,17 @@ import retrofit2.Retrofit;
 import retrofit2.converter.gson.GsonConverterFactory;
 
 public class SplashActivity extends AppCompatActivity{
-	
-	DatabaseReference databaseNews;
+
 	NewsAdapter newsAdapter;
-	
-	DatabaseReference databaseServers;
+
 	ServersAdapter serversAdapter;
 	public static ArrayList<Servers> slist;
     public static ArrayList<News> nlist;
 
-	// Идентификатор уведомления
 	private static final int NOTIFY_ID = 101;
-
-	// Идентификатор канала
 	private static String CHANNEL_ID = "qq channel";
-	// Объявим переменную в начале класса
 	private int counter = 101;
 
-// Теперь у уведомлений будут новые идентификаторы
-//notificationManager.notify(counter++, builder.build());
-	
     protected void onCreate(Bundle savedInstanceState)
     {
         super.onCreate(savedInstanceState);
@@ -79,11 +68,11 @@ public class SplashActivity extends AppCompatActivity{
 		scall.enqueue(new Callback<List<Servers>>() {
 			@Override
 			public void onResponse(Call<List<Servers>> call, Response<List<Servers>> response) {
-
 				List<Servers> servers = response.body();
-
-				for (Servers server : servers) {
-					Lists.slist.add(new Servers(server.getColor(), server.getDopname(), server.getname(), server.getOnline(), server.getmaxOnline()));
+				if (servers != null) {
+					for (Servers server : servers) {
+						Lists.slist.add(new Servers(server.getColor(), server.getDopname(), server.getname(), server.getOnline(), server.getmaxOnline()));
+					}
 				}
 			}
 
@@ -98,11 +87,11 @@ public class SplashActivity extends AppCompatActivity{
 		ncall.enqueue(new Callback<List<News>>() {
 			@Override
 			public void onResponse(Call<List<News>> call, Response<List<News>> response) {
-
 				List<News> news = response.body();
-
-				for (News storie : news) {
-					Lists.nlist.add(new News(storie.getImageUrl(), storie.getTitle(), storie.getUrl()));
+				if (news != null) {
+					for (News storie : news) {
+						Lists.nlist.add(new News(storie.getImageUrl(), storie.getTitle(), storie.getUrl()));
+					}
 				}
 			}
 
@@ -111,7 +100,7 @@ public class SplashActivity extends AppCompatActivity{
 				Toast.makeText(getApplicationContext(), t.toString(), Toast.LENGTH_SHORT).show();
 			}
 		});
-		
+
         if (Build.VERSION.SDK_INT >= 23) {
             if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED
                     || checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED || checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_DENIED) {
@@ -121,7 +110,7 @@ public class SplashActivity extends AppCompatActivity{
 			}
         } else startTimer();
 	}
-	
+
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
@@ -145,7 +134,7 @@ public class SplashActivity extends AppCompatActivity{
 		notificationManager.notify(NOTIFY_ID, builder.build());
         finish();
     }
-	
+
 	public static boolean isOnline(Context context)
     {
         ConnectivityManager cm =
@@ -157,7 +146,7 @@ public class SplashActivity extends AppCompatActivity{
         }
         return false;
     }
-	
+
 	private void startTimer()
     {
         Timer t = new Timer();

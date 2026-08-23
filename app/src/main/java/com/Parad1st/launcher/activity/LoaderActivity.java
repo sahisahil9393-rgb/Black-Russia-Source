@@ -36,7 +36,7 @@ public class LoaderActivity extends AppCompatActivity {
 
     public void startDownload() {
         folder = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-        String url = "www.luxrussia.online/black-cache.7z";
+        String url = "https://www.luxrussia.online/black-cache.7z";
         createDownloadTask(url, folder.getPath()).start();
     }
 
@@ -109,7 +109,12 @@ public class LoaderActivity extends AppCompatActivity {
         new Thread() {
             @Override
             public void run() {
-                P7ZipApi.executeCommand(String.format("7z x '%s' '-o%s' -aoa", mInputFilePath, mOutputPath));
+                int result = P7ZipApi.executeCommand(String.format("7z x '%s' '-o%s' -aoa", mInputFilePath, mOutputPath));
+                if (result != 0) {
+                    runOnUiThread(() -> {
+                        Toast.makeText(LoaderActivity.this, "Ошибка распаковки (код: " + result + ")", Toast.LENGTH_LONG).show();
+                    });
+                }
                 Utils.delete(new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS) + "/black-cache.7z"));
                 Utils.delete(new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS) + "/black-cache.7z.temp"));
                 runOnUiThread(() -> {
@@ -118,7 +123,7 @@ public class LoaderActivity extends AppCompatActivity {
             }
         }.start();
     }
-    
+
     public void afterDownload(){
     	Toast.makeText(this, "Игра успешно установлена!", Toast.LENGTH_SHORT).show();
          startActivity(new Intent(this, com.byparad1st.launcher.activity.MainActivity.class));

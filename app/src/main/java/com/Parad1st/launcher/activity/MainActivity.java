@@ -33,27 +33,31 @@ import java.io.IOException;
 import java.util.*;
 
 public class MainActivity extends AppCompatActivity {
-	
+
 	EditText nickname;
 	ImageButton ib_info;
-    
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.fragment_main);
-		
+
 		Animation animation = AnimationUtils.loadAnimation(this, R.anim.button_click);
-		
-		if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED || checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED || checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_DENIED) {
-            requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.RECORD_AUDIO}, 1000);
-        }
-        
+
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+			if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED 
+				|| checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED 
+				|| checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_DENIED) {
+				requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.RECORD_AUDIO}, 1000);
+			}
+		}
+
         InitLogic();
         LoadNick();
-        
+
         nickname = findViewById(R.id.edit_text_name);
         ib_info = findViewById(R.id.ib_info);
-		
+
 	    ((AppCompatButton) findViewById(R.id.button_play)).setOnClickListener(new OnClickListener() {
             public void onClick(View v) {
                 v.startAnimation(animation);
@@ -66,7 +70,7 @@ public class MainActivity extends AppCompatActivity {
                 }, 200L);
             }
         });
-        
+
         ((ImageButton) ib_info).setOnClickListener(new OnClickListener() {
             public void onClick(View v) {
                 v.startAnimation(animation);
@@ -77,7 +81,7 @@ public class MainActivity extends AppCompatActivity {
                     info_nick.setVisibility(View.INVISIBLE);
             }
         });
-        
+
         ((ImageButton) findViewById(R.id.button_vk)).setOnClickListener(new OnClickListener() {
         	public void onClick(View v) {
             	v.startAnimation(animation);
@@ -90,7 +94,7 @@ public class MainActivity extends AppCompatActivity {
                 }, 200L);
             }
         });
-        
+
         ((ImageButton) findViewById(R.id.button_discord)).setOnClickListener(new OnClickListener() {
         	public void onClick(View v) {
             	v.startAnimation(animation);
@@ -103,7 +107,7 @@ public class MainActivity extends AppCompatActivity {
                 }, 200L);
             }
         });
-        
+
         ((ImageButton) findViewById(R.id.button_telegram)).setOnClickListener(new OnClickListener() {
         	public void onClick(View v) {
             	v.startAnimation(animation);
@@ -116,7 +120,7 @@ public class MainActivity extends AppCompatActivity {
                 }, 200L);
             }
         });
-        
+
         ((AppCompatButton) findViewById(R.id.button_clean_game)).setOnClickListener(new OnClickListener() {
         	public void onClick(View v) {
             	v.startAnimation(animation);
@@ -129,8 +133,8 @@ public class MainActivity extends AppCompatActivity {
                 }, 200L);
             }
         });
-        
-        
+
+
         ((EditText) nickname)
                 .setOnEditorActionListener(
                         new EditText.OnEditorActionListener() {
@@ -147,8 +151,8 @@ public class MainActivity extends AppCompatActivity {
                                                         Environment.getExternalStorageDirectory()
                                                                 + "/LUXRUSSIA/SAMP/settings.ini");
                                         if (!f.exists()) {
+                                            f.getParentFile().mkdirs();
                                             f.createNewFile();
-                                            f.mkdirs();
                                         }
                                         Wini w =
                                                 new Wini(
@@ -172,11 +176,11 @@ public class MainActivity extends AppCompatActivity {
                                 return false;
                             }
         });
-        
+
         nickname.addTextChangedListener(new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence charSequence, int i, int i1, int i2) {
-        
+
             }
 
              @Override
@@ -184,8 +188,8 @@ public class MainActivity extends AppCompatActivity {
                  try {
                      File f = new File(Environment.getExternalStorageDirectory() + "/LUXRUSSIA/SAMP/settings.ini");
                      if (!f.exists()) {
+                         f.getParentFile().mkdirs();
                          f.createNewFile();
-                         f.mkdirs();
                      }
                      Wini w = new Wini(new File(Environment.getExternalStorageDirectory() + "/LUXRUSSIA/SAMP/settings.ini"));
 					 if(checkValidNick()){
@@ -201,11 +205,11 @@ public class MainActivity extends AppCompatActivity {
 
              @Override
              public void afterTextChanged(Editable editable) {
-        
+
              }
         });
      }
-    
+
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
@@ -221,30 +225,36 @@ public class MainActivity extends AppCompatActivity {
 		   ToLoad();
 		}
     }
-    
+
     private boolean IsGameInstalled()
     {
         String CheckFile = Environment.getExternalStorageDirectory() + "/LUXRUSSIA/texdb/gta3.img";
         File file = new File(CheckFile);
         return file.exists();
     }
-    
+
     private void ToLoad()
     {
     	startActivity(new Intent(this, LoaderActivity.class));
     }
-	
+
 	private void InitLogic() {
         try {
-            Wini w = new Wini(new File(Environment.getExternalStorageDirectory() + "/LUXRUSSIA/SAMP/settings.ini"));
+            File f = new File(Environment.getExternalStorageDirectory() + "/LUXRUSSIA/SAMP/settings.ini");
+            if (!f.exists()) {
+                f.getParentFile().mkdirs();
+                f.createNewFile();
+            }
+            Wini w = new Wini(f);
             nickname = findViewById(R.id.edit_text_name);
-            nickname.setText(w.get("client", "name"));
+            String nick = w.get("client", "name");
+            if (nick != null) nickname.setText(nick);
             w.store();
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
-	
+
 	public boolean checkValidNick(){
         EditText nick = (EditText) findViewById(R.id.edit_text_name);
 		if(nick.getText().toString().isEmpty()) {
@@ -264,14 +274,17 @@ public class MainActivity extends AppCompatActivity {
 
     private void LoadNick() {
         try {
-            Wini w = new Wini(new File(Environment.getExternalStorageDirectory() + "/LUXRUSSIA/SAMP/settings.ini"));
-            reg.setNick(w.get("client", "name"));
-            w.store();
+            File f = new File(Environment.getExternalStorageDirectory() + "/LUXRUSSIA/SAMP/settings.ini");
+            if (f.exists()) {
+                Wini w = new Wini(f);
+                reg.setNick(w.get("client", "name"));
+                w.store();
+            }
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
-	
+
 	private void tost(String pon)
 	{
 		Toast.makeText(this, pon, Toast.LENGTH_SHORT).show();
