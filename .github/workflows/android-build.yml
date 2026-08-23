@@ -11,90 +11,72 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
-      # ── 1. Checkout your repo (Jni source is already inside!) ──
+      # ── 1. Checkout your repo ──
       - name: Checkout your repo
         uses: actions/checkout@v4
 
-      # ── 2. Verify Jni source exists ──
-      - name: Verify Jni source exists
-        run: |
-          if [ ! -d "Jni source/jni" ]; then
-            echo "❌ ERROR: 'Jni source/' not found in your repo!"
-            echo "Add it: git clone https://github.com/Parad1st/Black-Russia-Source.git /tmp/p"
-            echo "        cp -r '/tmp/p/Jni source' ./"
-            echo "        git add 'Jni source' && git commit -m 'Add Jni source' && git push"
-            exit 1
-          fi
-          echo "✅ Jni source found"
-
-      # ── 3. Fix case sensitivity (Linux is case-sensitive, Windows was not) ──
-      - name: Fix case sensitivity
-        run: |
-          cd "Jni source/jni/game"
-          ln -s ccheckfilehash.h CCheckFileHash.h 2>/dev/null || true
-          cd ../util
-          sed -i 's/chatWindow.h/chatwindow.h/g' util.cpp
-          echo "Case sensitivity fixed"
-
-      # ── 4. Patch server IP/Port ──
-      - name: Patch server IP/Port
+      # ── 2. Patch libsamp.so binary directly (NO ndk-build!) ──
+      - name: Patch libsamp.so binary
         run: |
           IP="${{ env.SERVER_IP }}"
           PORT="${{ env.SERVER_PORT }}"
-          SUM=$(echo "$IP" | awk -F. '{print $1+$2+$3+$4}')
-          LEN=${#IP}
-          echo "Patching: $IP:$PORT (sum=$SUM, len=$LEN)"
-          sed -i "s|CSetServer::create(\".*\", [0-9]\+, [0-9]\+, [0-9]\+, false)|CSetServer::create(\"$IP\", $SUM, $LEN, $PORT, false)|g" "Jni source/jni/clientlogic/CNetwork.cpp"
-          grep "CSetServer::create" "Jni source/jni/clientlogic/CNetwork.cpp"
+          echo "Patching libsamp.so: $IP:$PORT"
 
-      # ── 5. Download NDK r17c (last with gnustl_static) ──
-      - name: Download NDK r17c
-        run: |
-          wget -q https://dl.google.com/android/repository/android-ndk-r17c-linux-x86_64.zip
-          unzip -q android-ndk-r17c-linux-x86_64.zip
-          echo "NDK r17c ready"
+          python3 << 'PYEOF'
+          import struct
+          import sys
 
-      # ── 6. Setup Java 8 (NDK r17c needs it) ──
-      - name: Setup Java 8
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "8"
+          SO_PATH = "app/src/main/jniLibs/armeabi-v7a/libsamp.so"
+          NEW_IP = b"94.23.168.153"
+          OLD_IP = b"65.108.99.34"
 
-      # ── 7. Build libsamp.so (clean build, single thread to avoid hanging) ──
-      - name: Build libsamp.so
-        timeout-minutes: 60
-        run: |
-          export ANDROID_NDK_HOME="$PWD/android-ndk-r17c"
-          cd "Jni source"
-          rm -rf obj libs
-          echo "Building with -j1 (single thread to avoid hanging)..."
-          "$ANDROID_NDK_HOME/ndk-build" APP_ABI=armeabi-v7a -j1 2>&1 | tee build.log
-          echo ""
-          echo "=== Checking output ==="
-          ls -la libs/armeabi-v7a/libsamp.so || echo "❌ libsamp.so NOT FOUND"
+          with open(SO_PATH, "rb") as f:
+              data = bytearray(f.read())
 
-      # ── 8. Replace libsamp.so ──
-      - name: Replace libsamp.so
-        run: |
-          if [ -f "Jni source/libs/armeabi-v7a/libsamp.so" ]; then
-            cp "Jni source/libs/armeabi-v7a/libsamp.so" app/src/main/jniLibs/armeabi-v7a/libsamp.so
-            echo "✅ libsamp.so replaced"
-          else
-            echo "⚠️ Using original libsamp.so (build may have failed)"
-          fi
+          # Find and replace IP
+          count = data.count(OLD_IP)
+          print(f"Found {count} occurrences of old IP")
 
-      # ── 9. Java 17 + Android SDK (your original workflow) ──
-      - name: Setup Java 17
+          if count > 0:
+              # Pad new IP with null bytes to match old length
+              padded_ip = NEW_IP.ljust(len(OLD_IP), b'\x00')
+              data = data.replace(OLD_IP, padded_ip)
+
+              with open(SO_PATH, "wb") as f:
+                  f.write(data)
+              print(f"Patched {count} IP addresses")
+          else:
+              print("Old IP not found — may already be patched or different format")
+
+          # Also try to find port 2369 (0x0941 in little-endian)
+          old_port = struct.pack('<H', 2369)
+          new_port = struct.pack('<H', 2144)
+
+          port_count = data.count(old_port)
+          if port_count > 0:
+              data = data.replace(old_port, new_port)
+              with open(SO_PATH, "wb") as f:
+                  f.write(data)
+              print(f"Patched {port_count} port addresses")
+          else:
+              print("Port not found in expected format")
+
+          print("Done!")
+          PYEOF
+
+          echo "libsamp.so patched"
+
+      # ── 3. Java 17 + Android SDK ──
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
           cache: gradle
 
-      - name: Setup Android SDK
+      - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
       - name: Install Android SDK
@@ -102,7 +84,7 @@ jobs:
           sdkmanager "platforms;android-34" "build-tools;34.0.0"
           sdkmanager --licenses < /dev/null || true
 
-      # ── 10. Keystore + APK Build (your original workflow) ──
+      # ── 4. Keystore + APK (your original) ──
       - name: Delete old keystore
         run: rm -f app/edgar.jks
 
@@ -110,17 +92,12 @@ jobs:
         run: |
           keytool -genkey -v -keystore app/edgar.jks -alias key0 -keyalg RSA -keysize 2048 -validity 10000 -storepass edgar333 -keypass edgar333 -dname "CN=Debug, OU=Debug, O=Debug, L=Debug, S=Debug, C=US"
 
-      - name: Check BASS library exists
-        run: |
-          ls -la app/src/main/cpp/vendor/bass/libs/ || echo "BASS libs folder not found"
-          find app/src/main/cpp -name "libbass.so" || echo "libbass.so not found anywhere"
-
       - name: Build release APK
         run: |
           chmod +x ./gradlew
-          ./gradlew clean assembleRelease --no-daemon --refresh-dependencies --stacktrace 2>&1 | tee build.log
+          ./gradlew clean assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log
 
-      # ── 11. Upload artifacts (your original workflow) ──
+      # ── 5. Upload ──
       - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
