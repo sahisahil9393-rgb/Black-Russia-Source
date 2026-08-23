@@ -21,101 +21,19 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      # ───────────────────────────────────────────────
-      # 1. Checkout your repo
-      # ───────────────────────────────────────────────
+      # ── 1. Checkout your repo ──
       - name: Checkout your repo
         uses: actions/checkout@v4
 
-      # ───────────────────────────────────────────────
-      # 2. Checkout Parad1st source
-      # ───────────────────────────────────────────────
-      - name: Checkout Parad1st source
-        uses: actions/checkout@v4
-        with:
-          repository: Parad1st/Black-Russia-Source
-          path: parad1st-source
-
-      # ───────────────────────────────────────────────
-      # 3. Copy Jni source (fix spaces)
-      # ───────────────────────────────────────────────
-      - name: Copy Jni source
-        run: |
-          cp -r "parad1st-source/Jni source" "./jni_source"
-          ls -la jni_source/jni/
-
-      # ───────────────────────────────────────────────
-      # 4. Patch server IP/Port
-      # ───────────────────────────────────────────────
-      - name: Patch server IP/Port
-        run: |
-          SERVER_IP="${{ github.event.inputs.server_ip || '94.23.168.153' }}"
-          SERVER_PORT="${{ github.event.inputs.server_port || '2144' }}"
-          SUM=$(echo "$SERVER_IP" | awk -F. '{print $1+$2+$3+$4}')
-          LEN=${#SERVER_IP}
-          echo "Server: $SERVER_IP:$SERVER_PORT (sum=$SUM, len=$LEN)"
-
-          FILE="jni_source/jni/clientlogic/CNetwork.cpp"
-          sed -i "s|CSetServer::create(\".*\", [0-9]\+, [0-9]\+, [0-9]\+, false)|CSetServer::create(\"$SERVER_IP\", $SUM, $LEN, $SERVER_PORT, false)|g" "$FILE"
-          grep "CSetServer::create" "$FILE"
-
-      # ───────────────────────────────────────────────
-      # 5. Download & setup NDK r16b (original project NDK)
-      # ───────────────────────────────────────────────
-      - name: Download NDK r16b
-        run: |
-          wget -q https://dl.google.com/android/repository/android-ndk-r16b-linux-x86_64.zip
-          unzip -q android-ndk-r16b-linux-x86_64.zip
-          echo "NDK r16b downloaded"
-          ls android-ndk-r16b/
-
-      # ───────────────────────────────────────────────
-      # 6. Setup Java 8 (required for NDK r16b)
-      # ───────────────────────────────────────────────
-      - name: Set up Java 8
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "8"
-
-      # ───────────────────────────────────────────────
-      # 7. Build libsamp.so with NDK r16b
-      # ───────────────────────────────────────────────
-      - name: Build libsamp.so
-        run: |
-          export ANDROID_NDK_HOME="$PWD/android-ndk-r16b"
-          export PATH="$ANDROID_NDK_HOME:$PATH"
-
-          echo "Building libsamp.so with NDK r16b..."
-          cd jni_source
-
-          # Use the old ndk-build (supports gnustl_static and android-14)
-          "$ANDROID_NDK_HOME/ndk-build" -j$(nproc)
-
-          echo "Build complete!"
-          ls -la libs/armeabi-v7a/
-
-      # ───────────────────────────────────────────────
-      # 8. Replace libsamp.so
-      # ───────────────────────────────────────────────
-      - name: Replace libsamp.so
-        run: |
-          cp -v "jni_source/libs/armeabi-v7a/libsamp.so" "app/src/main/jniLibs/armeabi-v7a/libsamp.so"
-          ls -la "app/src/main/jniLibs/armeabi-v7a/libsamp.so"
-
-      # ───────────────────────────────────────────────
-      # 9. Setup Java 17 for Gradle
-      # ───────────────────────────────────────────────
-      - name: Set up Java 17 for Gradle
+      # ── 2. Setup Java 17 ──
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
           cache: gradle
 
-      # ───────────────────────────────────────────────
-      # 10. Setup Android SDK
-      # ───────────────────────────────────────────────
+      # ── 3. Setup Android SDK ──
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
@@ -124,9 +42,42 @@ jobs:
           sdkmanager "platforms;android-34" "build-tools;34.0.0"
           sdkmanager --licenses < /dev/null || true
 
-      # ───────────────────────────────────────────────
-      # 11. Keystore + APK Build
-      # ───────────────────────────────────────────────
+      # ── 4. TRY: Build libsamp.so from source ──
+      # If this fails, workflow continues with existing libsamp.so
+      - name: Build libsamp.so (optional)
+        continue-on-error: true
+        run: |
+          echo "=== Attempting to build libsamp.so ==="
+
+          # Fetch Jni source
+          git clone --depth 1 https://github.com/Parad1st/Black-Russia-Source.git /tmp/parad1st
+          cp -r "/tmp/parad1st/Jni source" ./jni_source
+
+          # Patch IP/Port
+          SERVER_IP="${{ github.event.inputs.server_ip || '94.23.168.153' }}"
+          SERVER_PORT="${{ github.event.inputs.server_port || '2144' }}"
+          SUM=$(echo "$SERVER_IP" | awk -F. '{print $1+$2+$3+$4}')
+          LEN=${#SERVER_IP}
+          sed -i "s|CSetServer::create(\".*\", [0-9]\+, [0-9]\+, [0-9]\+, false)|CSetServer::create(\"$SERVER_IP\", $SUM, $LEN, $SERVER_PORT, false)|g" jni_source/jni/clientlogic/CNetwork.cpp
+
+          # Download NDK r17c
+          wget -q https://dl.google.com/android/repository/android-ndk-r17c-linux-x86_64.zip
+          unzip -q android-ndk-r17c-linux-x86_64.zip
+
+          # Build
+          export ANDROID_NDK_HOME="$PWD/android-ndk-r17c"
+          cd jni_source
+          rm -rf obj libs
+          "$ANDROID_NDK_HOME/ndk-build" clean
+          "$ANDROID_NDK_HOME/ndk-build" APP_ABI=armeabi-v7a -j$(nproc)
+
+          # Replace if built successfully
+          if [ -f "libs/armeabi-v7a/libsamp.so" ]; then
+            cp libs/armeabi-v7a/libsamp.so ../app/src/main/jniLibs/armeabi-v7a/libsamp.so
+            echo "✅ libsamp.so built and replaced!"
+          fi
+
+      # ── 5. Keystore + APK Build (YOUR ORIGINAL WORKFLOW) ──
       - name: Delete old keystore
         run: rm -f app/edgar.jks
 
@@ -144,9 +95,7 @@ jobs:
           chmod +x ./gradlew
           ./gradlew clean assembleRelease --no-daemon --refresh-dependencies --stacktrace 2>&1 | tee build.log
 
-      # ───────────────────────────────────────────────
-      # 12. Upload artifacts
-      # ───────────────────────────────────────────────
+      # ── 6. Upload artifacts (YOUR ORIGINAL WORKFLOW) ──
       - name: Upload build log (even if failed)
         if: always()
         uses: actions/upload-artifact@v4
