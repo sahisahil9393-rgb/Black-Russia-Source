@@ -13,59 +13,50 @@ jobs:
   build:
     runs-on: ubuntu-20.04
     steps:
-      # ── 1. Checkout your repo (Jni source is already inside) ──
       - name: Checkout your repo
         uses: actions/checkout@v4
 
-      # ── 2. Fix case sensitivity (Linux is case-sensitive, Windows was not) ──
       - name: Fix case sensitivity
         run: |
           cd "Jni source/jni/game"
           ln -s ccheckfilehash.h CCheckFileHash.h 2>/dev/null || true
           cd ../util
           sed -i 's/chatWindow.h/chatwindow.h/g' util.cpp
-          echo "Case sensitivity fixed"
 
-      # ── 3. Patch IP/Port (HARDCODED: 94.23.168.153:2144) ──
       - name: Patch server IP/Port
         run: |
           IP="${{ env.SERVER_IP }}"
           PORT="${{ env.SERVER_PORT }}"
           SUM=$(echo "$IP" | awk -F. '{print $1+$2+$3+$4}')
           LEN=${#IP}
-          echo "Patching: $IP:$PORT (sum=$SUM, len=$LEN)"
           sed -i "s|CSetServer::create(\".*\", [0-9]\+, [0-9]\+, [0-9]\+, false)|CSetServer::create(\"$IP\", $SUM, $LEN, $PORT, false)|g" "Jni source/jni/clientlogic/CNetwork.cpp"
           grep "CSetServer::create" "Jni source/jni/clientlogic/CNetwork.cpp"
 
-      # ── 4. Download NDK r17c ──
       - name: Download NDK r17c
         run: |
           wget -q https://dl.google.com/android/repository/android-ndk-r17c-linux-x86_64.zip
           unzip -q android-ndk-r17c-linux-x86_64.zip
 
-      # ── 5. Setup Java 8 (NDK r17c needs it) ──
       - name: Setup Java 8
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "8"
 
-      # ── 6. Build libsamp.so ──
+      # FIX: Use -j1 instead of -j$(nproc) to prevent hanging
       - name: Build libsamp.so
+        timeout-minutes: 45
         run: |
           export ANDROID_NDK_HOME="$PWD/android-ndk-r17c"
           cd "Jni source"
           rm -rf obj libs
-          "$ANDROID_NDK_HOME/ndk-build" APP_ABI=armeabi-v7a -j$(nproc)
+          "$ANDROID_NDK_HOME/ndk-build" APP_ABI=armeabi-v7a -j1 V=1
           ls -la libs/armeabi-v7a/libsamp.so
 
-      # ── 7. Replace libsamp.so ──
       - name: Replace libsamp.so
         run: |
           cp "Jni source/libs/armeabi-v7a/libsamp.so" app/src/main/jniLibs/armeabi-v7a/libsamp.so
-          echo "libsamp.so replaced"
 
-      # ── 8. Java 17 + Android SDK (your original) ──
       - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
@@ -81,7 +72,6 @@ jobs:
           sdkmanager "platforms;android-34" "build-tools;34.0.0"
           sdkmanager --licenses < /dev/null || true
 
-      # ── 9. Keystore + APK (your original) ──
       - name: Delete old keystore
         run: rm -f app/edgar.jks
 
@@ -94,7 +84,6 @@ jobs:
           chmod +x ./gradlew
           ./gradlew clean assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log
 
-      # ── 10. Upload (your original) ──
       - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
