@@ -1,4 +1,4 @@
-name: Build MATRESHKARP with Custom Server
+name: Build MATRESHKARP
 
 on:
   workflow_dispatch:
@@ -28,7 +28,7 @@ jobs:
         uses: actions/checkout@v4
 
       # ───────────────────────────────────────────────
-      # 2. Checkout the original source (Parad1st)
+      # 2. Checkout Parad1st source (Jni source only)
       # ───────────────────────────────────────────────
       - name: Checkout Parad1st source
         uses: actions/checkout@v4
@@ -37,13 +37,13 @@ jobs:
           path: parad1st-source
 
       # ───────────────────────────────────────────────
-      # 3. Copy Jni source into your project
+      # 3. Copy Jni source → fix space issue by renaming
       # ───────────────────────────────────────────────
-      - name: Copy Jni source to project
+      - name: Copy Jni source (fix spaces)
         run: |
           echo "Copying Jni source from Parad1st..."
-          cp -r "parad1st-source/Jni source" "./Jni source"
-          ls -la "Jni source/jni/"
+          cp -r "parad1st-source/Jni source" "./jni_source"
+          ls -la jni_source/jni/
 
       # ───────────────────────────────────────────────
       # 4. Patch server IP/Port in CNetwork.cpp
@@ -53,22 +53,31 @@ jobs:
           SERVER_IP="${{ github.event.inputs.server_ip || '94.23.168.153' }}"
           SERVER_PORT="${{ github.event.inputs.server_port || '2144' }}"
 
-          # Calculate sum from IP
+          # Calculate sum from IP (94+23+168+153 = 438)
           SUM=$(echo "$SERVER_IP" | awk -F. '{print $1+$2+$3+$4}')
           LEN=${#SERVER_IP}
 
           echo "Setting server: $SERVER_IP:$SERVER_PORT (sum=$SUM, len=$LEN)"
 
-          FILE="Jni source/jni/clientlogic/CNetwork.cpp"
+          FILE="jni_source/jni/clientlogic/CNetwork.cpp"
 
-          # Replace the server lines
+          # Replace both server lines
           sed -i "s|CSetServer::create(\".*\", [0-9]\+, [0-9]\+, [0-9]\+, false)|CSetServer::create(\"$SERVER_IP\", $SUM, $LEN, $SERVER_PORT, false)|g" "$FILE"
 
           echo "Patched CNetwork.cpp:"
           grep "CSetServer::create" "$FILE"
 
       # ───────────────────────────────────────────────
-      # 5. Setup Java + Android SDK + NDK
+      # 5. Fix Application.mk (gnustl_static removed in NDK r18+)
+      # ───────────────────────────────────────────────
+      - name: Fix Application.mk for NDK 25
+        run: |
+          echo "Fixing APP_STL from gnustl_static to c++_shared..."
+          sed -i 's/APP_STL := gnustl_static/APP_STL := c++_shared/' jni_source/jni/Application.mk
+          cat jni_source/jni/Application.mk
+
+      # ───────────────────────────────────────────────
+      # 6. Setup Java + Android SDK + NDK
       # ───────────────────────────────────────────────
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -86,7 +95,7 @@ jobs:
           sdkmanager --licenses < /dev/null || true
 
       # ───────────────────────────────────────────────
-      # 6. Build libsamp.so using ndk-build
+      # 7. Build libsamp.so (NO SPACES in path!)
       # ───────────────────────────────────────────────
       - name: Build libsamp.so
         run: |
@@ -94,29 +103,28 @@ jobs:
           export PATH="$ANDROID_NDK_HOME:$PATH"
 
           echo "Building libsamp.so..."
-          cd "Jni source"
+          cd jni_source
 
-          # ndk-build looks for jni/Android.mk automatically
-          "$ANDROID_NDK_HOME/ndk-build" -C jni -j$(nproc)
+          # ndk-build looks for jni/Android.mk — path has NO spaces now
+          "$ANDROID_NDK_HOME/ndk-build" -j$(nproc)
 
           echo "Build complete. Output:"
           ls -la libs/armeabi-v7a/
 
       # ───────────────────────────────────────────────
-      # 7. Replace libsamp.so in your project
+      # 8. Replace libsamp.so in your project
       # ───────────────────────────────────────────────
-      - name: Replace libsamp.so in project
+      - name: Replace libsamp.so
         run: |
-          echo "Replacing old libsamp.so..."
-          cp -v "Jni source/libs/armeabi-v7a/libsamp.so" "app/src/main/jniLibs/armeabi-v7a/libsamp.so"
+          echo "Replacing old libsamp.so with new one..."
+          cp -v "jni_source/libs/armeabi-v7a/libsamp.so" "app/src/main/jniLibs/armeabi-v7a/libsamp.so"
 
-          # Verify
-          echo "New libsamp.so:"
+          echo "New libsamp.so info:"
           ls -la "app/src/main/jniLibs/armeabi-v7a/libsamp.so"
           file "app/src/main/jniLibs/armeabi-v7a/libsamp.so"
 
       # ───────────────────────────────────────────────
-      # 8. Setup Keystore + Build APK
+      # 9. Keystore + APK Build (same as your original)
       # ───────────────────────────────────────────────
       - name: Delete old keystore
         run: rm -f app/edgar.jks
@@ -139,7 +147,7 @@ jobs:
           ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/25.2.9519653
 
       # ───────────────────────────────────────────────
-      # 9. Upload artifacts
+      # 10. Upload artifacts (same as your original)
       # ───────────────────────────────────────────────
       - name: Upload build log (even if failed)
         if: always()
