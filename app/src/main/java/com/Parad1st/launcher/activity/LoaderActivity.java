@@ -25,6 +25,10 @@ public class LoaderActivity extends AppCompatActivity {
     RoundCornerProgressBar progressbar;
     File folder;
 
+    private File getGameDir() {
+        return new File(getExternalFilesDir(null), "LUXRUSSIA");
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -35,7 +39,7 @@ public class LoaderActivity extends AppCompatActivity {
     }
 
     public void startDownload() {
-        folder = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+        folder = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
         String url = "https://www.luxrussia.online/black-cache.7z";
         createDownloadTask(url, folder.getPath()).start();
     }
@@ -104,8 +108,8 @@ public class LoaderActivity extends AppCompatActivity {
     }
 
     public void UnZipCache(){
-        String mInputFilePath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS) + "/black-cache.7z";
-        String mOutputPath = Environment.getExternalStorageDirectory().toString();
+        String mInputFilePath = new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "black-cache.7z").getAbsolutePath();
+        String mOutputPath = getGameDir().getAbsolutePath();
         new Thread() {
             @Override
             public void run() {
@@ -115,8 +119,8 @@ public class LoaderActivity extends AppCompatActivity {
                         Toast.makeText(LoaderActivity.this, "Ошибка распаковки (код: " + result + ")", Toast.LENGTH_LONG).show();
                     });
                 }
-                Utils.delete(new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS) + "/black-cache.7z"));
-                Utils.delete(new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS) + "/black-cache.7z.temp"));
+                Utils.delete(new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "black-cache.7z"));
+                Utils.delete(new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "black-cache.7z.temp"));
                 runOnUiThread(() -> {
                     afterDownload();
                 }); 

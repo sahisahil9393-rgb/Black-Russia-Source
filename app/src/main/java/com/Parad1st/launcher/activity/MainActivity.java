@@ -38,6 +38,18 @@ public class MainActivity extends AppCompatActivity {
 	EditText nickname;
 	ImageButton ib_info;
 
+	private File getGameDir() {
+		return new File(getExternalFilesDir(null), "LUXRUSSIA");
+	}
+
+	private File getSettingsFile() {
+		return new File(getGameDir(), "SAMP/settings.ini");
+	}
+
+	private File getGameCheckFile() {
+		return new File(getGameDir(), "texdb/gta3.img");
+	}
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -147,22 +159,14 @@ public class MainActivity extends AppCompatActivity {
                                         || event.getAction() == KeyEvent.ACTION_DOWN
                                                 && event.getKeyCode() == KeyEvent.KEYCODE_ENTER) {
                                     try {
-                                        File f =
-                                                new File(
-                                                        Environment.getExternalStorageDirectory()
-                                                                + "/LUXRUSSIA/SAMP/settings.ini");
+                                        File f = getSettingsFile();
                                         if (!f.exists()) {
                                             f.getParentFile().mkdirs();
                                             f.createNewFile();
                                         }
-                                        Wini w =
-                                                new Wini(
-                                                        new File(
-                                                                Environment.getExternalStorageDirectory()
-                                 + "/LUXRUSSIA/SAMP/settings.ini"));
+                                        Wini w = new Wini(f);
 								 if(checkValidNick()){
 									 w.put("client", "name", nickname.getText().toString());
-                                        //Toast.makeText(this, "Ваш новый никнейм успешно сохранен!", Toast.LENGTH_SHORT).show();
                                         tost("Ваш новый никнейм успешно сохранен!");
                                      reg.setNick(String.valueOf(nickname.getText()));
 								 } else {
@@ -187,12 +191,12 @@ public class MainActivity extends AppCompatActivity {
              @Override
              public void onTextChanged(CharSequence charSequence, int i, int i1, int i2) {
                  try {
-                     File f = new File(Environment.getExternalStorageDirectory() + "/LUXRUSSIA/SAMP/settings.ini");
+                     File f = getSettingsFile();
                      if (!f.exists()) {
                          f.getParentFile().mkdirs();
                          f.createNewFile();
                      }
-                     Wini w = new Wini(new File(Environment.getExternalStorageDirectory() + "/LUXRUSSIA/SAMP/settings.ini"));
+                     Wini w = new Wini(f);
 					 if(checkValidNick()){
 						w.put("client", "name", nickname.getText().toString());        
 					  } else {
@@ -229,9 +233,7 @@ public class MainActivity extends AppCompatActivity {
 
     private boolean IsGameInstalled()
     {
-        String CheckFile = Environment.getExternalStorageDirectory() + "/LUXRUSSIA/texdb/gta3.img";
-        File file = new File(CheckFile);
-        return file.exists();
+        return getGameCheckFile().exists();
     }
 
     private void ToLoad()
@@ -241,7 +243,7 @@ public class MainActivity extends AppCompatActivity {
 
 	private void InitLogic() {
         try {
-            File f = new File(Environment.getExternalStorageDirectory() + "/LUXRUSSIA/SAMP/settings.ini");
+            File f = getSettingsFile();
             if (!f.exists()) {
                 f.getParentFile().mkdirs();
                 f.createNewFile();
@@ -275,7 +277,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void LoadNick() {
         try {
-            File f = new File(Environment.getExternalStorageDirectory() + "/LUXRUSSIA/SAMP/settings.ini");
+            File f = getSettingsFile();
             if (f.exists()) {
                 Wini w = new Wini(f);
                 reg.setNick(w.get("client", "name"));
