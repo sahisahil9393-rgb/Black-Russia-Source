@@ -1,7 +1,16 @@
-name: Build MATRESHKARP
+name: Build MATRESHKARP with Custom Server
 
 on:
   workflow_dispatch:
+    inputs:
+      server_ip:
+        description: 'Server IP (e.g. 94.23.168.153)'
+        required: true
+        default: '94.23.168.153'
+      server_port:
+        description: 'Server Port (e.g. 2144)'
+        required: true
+        default: '2144'
   push:
     branches: [main]
 
@@ -12,9 +21,55 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      - name: Checkout
+      # ───────────────────────────────────────────────
+      # 1. Checkout your repo
+      # ───────────────────────────────────────────────
+      - name: Checkout your repo
         uses: actions/checkout@v4
 
+      # ───────────────────────────────────────────────
+      # 2. Checkout the original source (Parad1st)
+      # ───────────────────────────────────────────────
+      - name: Checkout Parad1st source
+        uses: actions/checkout@v4
+        with:
+          repository: Parad1st/Black-Russia-Source
+          path: parad1st-source
+
+      # ───────────────────────────────────────────────
+      # 3. Copy Jni source into your project
+      # ───────────────────────────────────────────────
+      - name: Copy Jni source to project
+        run: |
+          echo "Copying Jni source from Parad1st..."
+          cp -r "parad1st-source/Jni source" "./Jni source"
+          ls -la "Jni source/jni/"
+
+      # ───────────────────────────────────────────────
+      # 4. Patch server IP/Port in CNetwork.cpp
+      # ───────────────────────────────────────────────
+      - name: Patch server IP/Port
+        run: |
+          SERVER_IP="${{ github.event.inputs.server_ip || '94.23.168.153' }}"
+          SERVER_PORT="${{ github.event.inputs.server_port || '2144' }}"
+
+          # Calculate sum from IP
+          SUM=$(echo "$SERVER_IP" | awk -F. '{print $1+$2+$3+$4}')
+          LEN=${#SERVER_IP}
+
+          echo "Setting server: $SERVER_IP:$SERVER_PORT (sum=$SUM, len=$LEN)"
+
+          FILE="Jni source/jni/clientlogic/CNetwork.cpp"
+
+          # Replace the server lines
+          sed -i "s|CSetServer::create(\".*\", [0-9]\+, [0-9]\+, [0-9]\+, false)|CSetServer::create(\"$SERVER_IP\", $SUM, $LEN, $SERVER_PORT, false)|g" "$FILE"
+
+          echo "Patched CNetwork.cpp:"
+          grep "CSetServer::create" "$FILE"
+
+      # ───────────────────────────────────────────────
+      # 5. Setup Java + Android SDK + NDK
+      # ───────────────────────────────────────────────
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -25,11 +80,44 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android SDK + NDK + CMake
+      - name: Install Android SDK + NDK
         run: |
-          sdkmanager "platforms;android-34" "build-tools;34.0.0" "ndk;25.2.9519653" "cmake;3.22.1"
+          sdkmanager "platforms;android-34" "build-tools;34.0.0" "ndk;25.2.9519653"
           sdkmanager --licenses < /dev/null || true
 
+      # ───────────────────────────────────────────────
+      # 6. Build libsamp.so using ndk-build
+      # ───────────────────────────────────────────────
+      - name: Build libsamp.so
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_SDK_ROOT/ndk/25.2.9519653"
+          export PATH="$ANDROID_NDK_HOME:$PATH"
+
+          echo "Building libsamp.so..."
+          cd "Jni source"
+
+          # ndk-build looks for jni/Android.mk automatically
+          "$ANDROID_NDK_HOME/ndk-build" -C jni -j$(nproc)
+
+          echo "Build complete. Output:"
+          ls -la libs/armeabi-v7a/
+
+      # ───────────────────────────────────────────────
+      # 7. Replace libsamp.so in your project
+      # ───────────────────────────────────────────────
+      - name: Replace libsamp.so in project
+        run: |
+          echo "Replacing old libsamp.so..."
+          cp -v "Jni source/libs/armeabi-v7a/libsamp.so" "app/src/main/jniLibs/armeabi-v7a/libsamp.so"
+
+          # Verify
+          echo "New libsamp.so:"
+          ls -la "app/src/main/jniLibs/armeabi-v7a/libsamp.so"
+          file "app/src/main/jniLibs/armeabi-v7a/libsamp.so"
+
+      # ───────────────────────────────────────────────
+      # 8. Setup Keystore + Build APK
+      # ───────────────────────────────────────────────
       - name: Delete old keystore
         run: rm -f app/edgar.jks
 
@@ -50,12 +138,22 @@ jobs:
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/25.2.9519653
 
+      # ───────────────────────────────────────────────
+      # 9. Upload artifacts
+      # ───────────────────────────────────────────────
       - name: Upload build log (even if failed)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: build-log
           path: build.log
+
+      - name: Upload libsamp.so
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: libsamp-so
+          path: app/src/main/jniLibs/armeabi-v7a/libsamp.so
 
       - name: Upload APK
         if: success()
