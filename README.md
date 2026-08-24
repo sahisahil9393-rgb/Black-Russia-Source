@@ -1,4 +1,4 @@
-# BlackRussiaSource
+# BlackRussiaSource  @
 Исходники лаунчера Black Russia и клиента. Подойдёт для создания своего crmp проекта. 
 
 ![BlackRussiaSourceInGame](https://raw.githubusercontent.com/Parad1st/Black-Russia-Source/main/Documentation/Image/2024-04-05_17-40-45.png)
