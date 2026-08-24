@@ -68,13 +68,17 @@ jobs:
               print("No old IP/Port found — may already be patched or different format")
           PYEOF
 
-      # ── 2.5 Fix package names in source files ──
+      # ── 3. FIX PACKAGE NAMES (added) ──
       - name: Fix package names
         run: |
+          echo "=== Fixing package names ==="
           python3 << 'PYEOF'
           import os
 
+          fixed_count = 0
+
           def fix_file(path):
+              global fixed_count
               with open(path, 'r', encoding='utf-8') as f:
                   content = f.read()
               original = content
@@ -86,6 +90,7 @@ jobs:
                   with open(path, 'w', encoding='utf-8') as f:
                       f.write(content)
                   print(f'[FIXED] {path}')
+                  fixed_count += 1
 
           for root, dirs, files in os.walk('app/src/main/java'):
               for file in files:
@@ -94,9 +99,10 @@ jobs:
 
           fix_file('app/build.gradle')
           fix_file('app/src/main/AndroidManifest.xml')
+          print(f"=== Total fixed: {fixed_count} files ===")
           PYEOF
 
-      # ── 3. Java 17 + Android SDK ──
+      # ── 4. Java 17 + Android SDK ──
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -112,7 +118,7 @@ jobs:
           sdkmanager "platforms;android-34" "build-tools;34.0.0"
           sdkmanager --licenses < /dev/null || true
 
-      # ── 4. Keystore + APK ──
+      # ── 5. Keystore + APK ──
       - name: Delete old keystore
         run: rm -f app/edgar.jks
 
@@ -125,7 +131,7 @@ jobs:
           chmod +x ./gradlew
           ./gradlew clean assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log
 
-      # ── 5. Upload ──
+      # ── 6. Upload ──
       - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
