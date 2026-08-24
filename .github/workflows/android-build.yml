@@ -13,51 +13,84 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
+      # ── 1. Checkout your repo ──
       - name: Checkout your repo
         uses: actions/checkout@v4
 
+      # ── 2. Patch .so binaries (IP as text + Port as uint16 LE) ──
       - name: Patch all .so binaries
         run: |
           IP="${{ env.SERVER_IP }}"
           PORT="${{ env.SERVER_PORT }}"
-          echo "Patching all .so files for IP: $IP:$PORT"
+          echo "Patching .so files for IP: $IP:$PORT"
           python3 << 'PYEOF'
           import os
           import struct
+
           SO_DIR = "app/src/main/jniLibs/armeabi-v7a"
-          OLD_IP = b"65.108.99.34"
-          NEW_IP = b"94.23.168.153"
-          OLD_PORT = struct.pack('<H', 2369)
+
+          # NEW values
+          NEW_IP_STR = b"94.23.168.153"
           NEW_PORT = struct.pack('<H', 2144)
+
+          # OLD values to search for
+          OLD_IP_STRS = [
+              b"65.108.99.34",
+              b"94.23.168.153",  # In case already patched
+          ]
+          OLD_PORTS = [
+              struct.pack('<H', 2369),
+              struct.pack('<H', 2144),  # In case already patched
+          ]
+
           patched_files = []
+
           for filename in os.listdir(SO_DIR):
               if not filename.endswith('.so'):
                   continue
+
               filepath = os.path.join(SO_DIR, filename)
               with open(filepath, "rb") as f:
                   data = bytearray(f.read())
-              ip_count = data.count(OLD_IP)
-              port_count = data.count(OLD_PORT)
-              if ip_count > 0 or port_count > 0:
-                  if ip_count > 0:
-                      padded_ip = NEW_IP.ljust(len(OLD_IP), b'\x00')
-                      data = data.replace(OLD_IP, padded_ip)
-                  if port_count > 0:
-                      data = data.replace(OLD_PORT, NEW_PORT)
+
+              ip_patched = False
+              port_patched = False
+
+              # Patch IP (as text string with dots)
+              for old_ip in OLD_IP_STRS:
+                  if old_ip in data and old_ip != NEW_IP_STR:
+                      # Pad new IP to same length as old if needed
+                      if len(NEW_IP_STR) <= len(old_ip):
+                          padded = NEW_IP_STR.ljust(len(old_ip), b'\x00')
+                          data = data.replace(old_ip, padded)
+                          ip_patched = True
+
+              # Patch Port (as uint16 little-endian)
+              for old_port in OLD_PORTS:
+                  if old_port in data and old_port != NEW_PORT:
+                      data = data.replace(old_port, NEW_PORT)
+                      port_patched = True
+
+              if ip_patched or port_patched:
                   with open(filepath, "wb") as f:
                       f.write(data)
-                  patched_files.append(f"{filename}: IP={ip_count}, Port={port_count}")
+                  info = []
+                  if ip_patched: info.append("IP")
+                  if port_patched: info.append("Port")
+                  patched_files.append(f"{filename}: {', '.join(info)}")
+
           if patched_files:
               print("Patched files:")
               for f in patched_files:
                   print(f"  {f}")
           else:
-              print("No old IP/Port found")
+              print("No patches needed — .so files may already be correct")
           PYEOF
 
+      # ── 3. Fix package names (byparad1st -> Parad1st) ──
       - name: Fix package names
         run: |
-          echo "=== START FIXING ==="
+          echo "=== FIXING PACKAGE NAMES ==="
           python3 << 'PYEOF'
           import os
           fixed = 0
@@ -66,14 +99,14 @@ jobs:
               with open(path, 'r', encoding='utf-8') as f:
                   content = f.read()
               orig = content
-              # Fix 1: package declarations and imports
+              # Fix package declarations and imports
               content = content.replace('com.byparad1st', 'com.Parad1st')
-              # Fix 2: applicationId (lowercase p in parad1stgames!)
-              content = content.replace("applicationId 'com.parad1stgames.game'", "applicationId 'com.Parad1st.game'")
-              content = content.replace('applicationId "com.parad1stgames.game"', "applicationId 'com.Parad1st.game'")
-              # Fix 3: namespace
+              # Fix namespace
               content = content.replace("namespace 'com.byparad1st.game'", "namespace 'com.Parad1st.game'")
               content = content.replace('namespace "com.byparad1st.game"', "namespace 'com.Parad1st.game'")
+              # Fix AndroidManifest package
+              content = content.replace('package="com.byparad1st.game"', 'package="com.Parad1st.game"')
+              # NOTE: applicationId is NOT changed (stays com.parad1stgames.game)
               if content != orig:
                   with open(path, 'w', encoding='utf-8') as f:
                       f.write(content)
@@ -88,15 +121,19 @@ jobs:
           print(f'=== FIXED {fixed} FILES ===')
           PYEOF
 
+      # ── 4. Verify fixes ──
       - name: Verify fixes
         run: |
-          echo "=== build.gradle applicationId ==="
+          echo "=== applicationId (UNCHANGED) ==="
           grep "applicationId" app/build.gradle || true
-          echo "=== build.gradle namespace ==="
+          echo "=== namespace ==="
           grep "namespace" app/build.gradle || true
-          echo "=== AndroidManifest GTASA ==="
+          echo "=== GTASA in Manifest ==="
           grep "GTASA" app/src/main/AndroidManifest.xml || true
+          echo "=== GTASA in MainActivity ==="
+          grep -n "GTASA" app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java || true
 
+      # ── 5. Java 17 + Android SDK ──
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -112,6 +149,7 @@ jobs:
           sdkmanager "platforms;android-34" "build-tools;34.0.0"
           sdkmanager --licenses < /dev/null || true
 
+      # ── 6. Keystore + APK ──
       - name: Delete old keystore
         run: rm -f app/edgar.jks
 
@@ -124,6 +162,7 @@ jobs:
           chmod +x ./gradlew
           ./gradlew clean assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log
 
+      # ── 7. Upload ──
       - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
