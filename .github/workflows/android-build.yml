@@ -70,10 +70,9 @@ jobs:
               with open(path, 'r', encoding='utf-8') as f:
                   content = f.read()
               orig = content
-              # Fix ALL occurrences of byparad1st -> Parad1st
               content = content.replace('com.byparad1st', 'com.Parad1st')
-              # Fix applicationId (lowercase p)
-              content = content.replace("applicationId 'com.parad1stgames.game'", "applicationId 'com.parad1stgames.game'")
+              content = content.replace("namespace 'com.byparad1st.game'", "namespace 'com.Parad1st.game'")
+              content = content.replace('package="com.byparad1st.game"', 'package="com.Parad1st.game"')
               if content != orig:
                   with open(path, 'w', encoding='utf-8') as f:
                       f.write(content)
@@ -88,14 +87,45 @@ jobs:
           print(f'=== FIXED {fixed} FILES ===')
           PYEOF
 
-      - name: Verify critical fixes
+      # ── FIX GTASA.java to load native libraries ──
+      - name: Fix GTASA.java to load game
         run: |
-          echo "=== MainActivity GTASA reference ==="
-          grep -n "GTASA" app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java || true
-          echo "=== AndroidManifest GTASA activity ==="
-          grep "GTASA" app/src/main/AndroidManifest.xml || true
-          echo "=== package name ==="
-          grep "package=" app/src/main/AndroidManifest.xml | head -1 || true
+          echo "=== FIXING GTASA.java ==="
+          cat > app/src/main/java/com/Parad1st/game/core/GTASA.java << 'JAVAEOF'
+          package com.Parad1st.game.core;
+
+          import android.os.Bundle;
+          import android.view.View;
+          import com.nvidia.devtech.NvEventQueueActivity;
+
+          public class GTASA extends NvEventQueueActivity {
+              static {
+                  System.loadLibrary("ImmEmulatorJ");
+                  System.loadLibrary("GTASA");
+                  System.loadLibrary("sampvoice");
+              }
+
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  getWindow().getDecorView().setSystemUiVisibility(
+                      View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
+                      View.SYSTEM_UI_FLAG_FULLSCREEN |
+                      View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                  );
+              }
+          }
+          JAVAEOF
+          echo "GTASA.java patched to extend NvEventQueueActivity and load .so libraries"
+
+      - name: Verify
+        run: |
+          echo "=== GTASA.java contents ==="
+          cat app/src/main/java/com/Parad1st/game/core/GTASA.java
+          echo "=== applicationId ==="
+          grep "applicationId" app/build.gradle
+          echo "=== GTASA in Manifest ==="
+          grep "GTASA" app/src/main/AndroidManifest.xml
 
       - name: Set up Java
         uses: actions/setup-java@v4
