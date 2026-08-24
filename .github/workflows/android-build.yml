@@ -13,96 +13,76 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      # ── 1. Checkout your repo ──
       - name: Checkout your repo
         uses: actions/checkout@v4
 
-      # ── 2. Find and patch ALL .so files ──
       - name: Patch all .so binaries
         run: |
           IP="${{ env.SERVER_IP }}"
           PORT="${{ env.SERVER_PORT }}"
           echo "Patching all .so files for IP: $IP:$PORT"
-
           python3 << 'PYEOF'
           import os
           import struct
-
           SO_DIR = "app/src/main/jniLibs/armeabi-v7a"
           OLD_IP = b"65.108.99.34"
           NEW_IP = b"94.23.168.153"
           OLD_PORT = struct.pack('<H', 2369)
           NEW_PORT = struct.pack('<H', 2144)
-
           patched_files = []
-
           for filename in os.listdir(SO_DIR):
               if not filename.endswith('.so'):
                   continue
-
               filepath = os.path.join(SO_DIR, filename)
               with open(filepath, "rb") as f:
                   data = bytearray(f.read())
-
               ip_count = data.count(OLD_IP)
               port_count = data.count(OLD_PORT)
-
               if ip_count > 0 or port_count > 0:
                   if ip_count > 0:
                       padded_ip = NEW_IP.ljust(len(OLD_IP), b'\x00')
                       data = data.replace(OLD_IP, padded_ip)
-
                   if port_count > 0:
                       data = data.replace(OLD_PORT, NEW_PORT)
-
                   with open(filepath, "wb") as f:
                       f.write(data)
-
                   patched_files.append(f"{filename}: IP={ip_count}, Port={port_count}")
-
           if patched_files:
               print("Patched files:")
               for f in patched_files:
                   print(f"  {f}")
           else:
-              print("No old IP/Port found — may already be patched or different format")
+              print("No old IP/Port found")
           PYEOF
 
-      # ── 3. FIX PACKAGE NAMES (added) ──
       - name: Fix package names
         run: |
-          echo "=== Fixing package names ==="
+          echo "=== START FIXING ==="
           python3 << 'PYEOF'
           import os
-
-          fixed_count = 0
-
-          def fix_file(path):
-              global fixed_count
+          fixed = 0
+          def fix(path):
+              global fixed
               with open(path, 'r', encoding='utf-8') as f:
                   content = f.read()
-              original = content
+              orig = content
               content = content.replace('com.byparad1st', 'com.Parad1st')
-              content = content.replace('com.Parad1st.game.core.GTASA', 'com.Parad1st.game.GTASA')
               content = content.replace("applicationId 'com.Parad1stgames.game'", "applicationId 'com.Parad1st.game'")
               content = content.replace('applicationId "com.Parad1stgames.game"', "applicationId 'com.Parad1st.game'")
-              if content != original:
+              if content != orig:
                   with open(path, 'w', encoding='utf-8') as f:
                       f.write(content)
                   print(f'[FIXED] {path}')
-                  fixed_count += 1
-
+                  fixed += 1
           for root, dirs, files in os.walk('app/src/main/java'):
               for file in files:
                   if file.endswith('.java'):
-                      fix_file(os.path.join(root, file))
-
-          fix_file('app/build.gradle')
-          fix_file('app/src/main/AndroidManifest.xml')
-          print(f"=== Total fixed: {fixed_count} files ===")
+                      fix(os.path.join(root, file))
+          fix('app/build.gradle')
+          fix('app/src/main/AndroidManifest.xml')
+          print(f'=== FIXED {fixed} FILES ===')
           PYEOF
 
-      # ── 4. Java 17 + Android SDK ──
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -118,7 +98,6 @@ jobs:
           sdkmanager "platforms;android-34" "build-tools;34.0.0"
           sdkmanager --licenses < /dev/null || true
 
-      # ── 5. Keystore + APK ──
       - name: Delete old keystore
         run: rm -f app/edgar.jks
 
@@ -131,7 +110,6 @@ jobs:
           chmod +x ./gradlew
           ./gradlew clean assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log
 
-      # ── 6. Upload ──
       - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
