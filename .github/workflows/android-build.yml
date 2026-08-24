@@ -13,81 +13,69 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      # ── 1. Checkout your repo ──
       - name: Checkout your repo
         uses: actions/checkout@v4
 
-      # ── 2. Patch .so binaries (IP as text + Port as uint16 LE) ──
-      - name: Patch all .so binaries
+      # ── 2. Download FRESH .so files from original repo ──
+      - name: Download fresh .so files
+        run: |
+          echo "Downloading fresh .so files from Parad1st repo..."
+          SO_DIR="app/src/main/jniLibs/armeabi-v7a"
+          BASE="https://raw.githubusercontent.com/Parad1st/Black-Russia-Source/main/app/src/main/jniLibs/armeabi-v7a"
+          for f in libGTASA.so libImmEmulatorJ.so libSCAnd.so libbass.so libparad1st.so libsampvoice.so; do
+            curl -sL "$BASE/$f" -o "$SO_DIR/$f"
+            echo "  $f ($(stat -c%s "$SO_DIR/$f") bytes)"
+          done
+          echo "Download complete."
+
+      # ── 3. Patch .so files (IP text + Port binary) ──
+      - name: Patch .so binaries
         run: |
           IP="${{ env.SERVER_IP }}"
           PORT="${{ env.SERVER_PORT }}"
-          echo "Patching .so files for IP: $IP:$PORT"
+          echo "Patching .so for IP: $IP:$PORT"
           python3 << 'PYEOF'
-          import os
-          import struct
-
+          import os, struct
           SO_DIR = "app/src/main/jniLibs/armeabi-v7a"
 
-          # NEW values
-          NEW_IP_STR = b"94.23.168.153"
+          NEW_IP = b"94.23.168.153"
           NEW_PORT = struct.pack('<H', 2144)
 
-          # OLD values to search for
-          OLD_IP_STRS = [
-              b"65.108.99.34",
-              b"94.23.168.153",  # In case already patched
-          ]
-          OLD_PORTS = [
-              struct.pack('<H', 2369),
-              struct.pack('<H', 2144),  # In case already patched
-          ]
-
-          patched_files = []
+          OLD_IP = b"65.108.99.34"
+          OLD_PORT = struct.pack('<H', 2369)
 
           for filename in os.listdir(SO_DIR):
               if not filename.endswith('.so'):
                   continue
-
               filepath = os.path.join(SO_DIR, filename)
               with open(filepath, "rb") as f:
                   data = bytearray(f.read())
 
-              ip_patched = False
-              port_patched = False
+              ip_done = False
+              port_done = False
 
-              # Patch IP (as text string with dots)
-              for old_ip in OLD_IP_STRS:
-                  if old_ip in data and old_ip != NEW_IP_STR:
-                      # Pad new IP to same length as old if needed
-                      if len(NEW_IP_STR) <= len(old_ip):
-                          padded = NEW_IP_STR.ljust(len(old_ip), b'\x00')
-                          data = data.replace(old_ip, padded)
-                          ip_patched = True
+              if OLD_IP in data:
+                  padded = NEW_IP.ljust(len(OLD_IP), b'\x00')
+                  data = data.replace(OLD_IP, padded)
+                  ip_done = True
 
-              # Patch Port (as uint16 little-endian)
-              for old_port in OLD_PORTS:
-                  if old_port in data and old_port != NEW_PORT:
-                      data = data.replace(old_port, NEW_PORT)
-                      port_patched = True
+              if OLD_PORT in data:
+                  data = data.replace(OLD_PORT, NEW_PORT)
+                  port_done = True
 
-              if ip_patched or port_patched:
-                  with open(filepath, "wb") as f:
-                      f.write(data)
-                  info = []
-                  if ip_patched: info.append("IP")
-                  if port_patched: info.append("Port")
-                  patched_files.append(f"{filename}: {', '.join(info)}")
+              with open(filepath, "wb") as f:
+                  f.write(data)
 
-          if patched_files:
-              print("Patched files:")
-              for f in patched_files:
-                  print(f"  {f}")
-          else:
-              print("No patches needed — .so files may already be correct")
+              status = []
+              if ip_done: status.append("IP")
+              if port_done: status.append("Port")
+              if status:
+                  print(f"  {filename}: {', '.join(status)}")
+              else:
+                  print(f"  {filename}: already patched or no match")
           PYEOF
 
-      # ── 3. Fix package names (byparad1st -> Parad1st) ──
+      # ── 4. Fix package names ──
       - name: Fix package names
         run: |
           echo "=== FIXING PACKAGE NAMES ==="
@@ -99,18 +87,13 @@ jobs:
               with open(path, 'r', encoding='utf-8') as f:
                   content = f.read()
               orig = content
-              # Fix package declarations and imports
               content = content.replace('com.byparad1st', 'com.Parad1st')
-              # Fix namespace
               content = content.replace("namespace 'com.byparad1st.game'", "namespace 'com.Parad1st.game'")
-              content = content.replace('namespace "com.byparad1st.game"', "namespace 'com.Parad1st.game'")
-              # Fix AndroidManifest package
               content = content.replace('package="com.byparad1st.game"', 'package="com.Parad1st.game"')
-              # NOTE: applicationId is NOT changed (stays com.parad1stgames.game)
               if content != orig:
                   with open(path, 'w', encoding='utf-8') as f:
                       f.write(content)
-                  print(f'[FIXED] {path}')
+                  print(f'[FIXED] {os.path.basename(path)}')
                   fixed += 1
           for root, dirs, files in os.walk('app/src/main/java'):
               for file in files:
@@ -121,19 +104,17 @@ jobs:
           print(f'=== FIXED {fixed} FILES ===')
           PYEOF
 
-      # ── 4. Verify fixes ──
-      - name: Verify fixes
+      # ── 5. Verify ──
+      - name: Verify
         run: |
-          echo "=== applicationId (UNCHANGED) ==="
-          grep "applicationId" app/build.gradle || true
+          echo "=== applicationId (must be UNCHANGED) ==="
+          grep "applicationId" app/build.gradle
           echo "=== namespace ==="
-          grep "namespace" app/build.gradle || true
-          echo "=== GTASA in Manifest ==="
-          grep "GTASA" app/src/main/AndroidManifest.xml || true
-          echo "=== GTASA in MainActivity ==="
-          grep -n "GTASA" app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java || true
+          grep "namespace" app/build.gradle
+          echo "=== GTASA reference ==="
+          grep -n "GTASA" app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java
 
-      # ── 5. Java 17 + Android SDK ──
+      # ── 6. Java + SDK ──
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -149,7 +130,7 @@ jobs:
           sdkmanager "platforms;android-34" "build-tools;34.0.0"
           sdkmanager --licenses < /dev/null || true
 
-      # ── 6. Keystore + APK ──
+      # ── 7. Keystore + Build ──
       - name: Delete old keystore
         run: rm -f app/edgar.jks
 
@@ -162,7 +143,7 @@ jobs:
           chmod +x ./gradlew
           ./gradlew clean assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log
 
-      # ── 7. Upload ──
+      # ── 8. Upload ──
       - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
