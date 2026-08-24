@@ -66,9 +66,14 @@ jobs:
               with open(path, 'r', encoding='utf-8') as f:
                   content = f.read()
               orig = content
+              # Fix 1: package declarations and imports
               content = content.replace('com.byparad1st', 'com.Parad1st')
-              content = content.replace("applicationId 'com.Parad1stgames.game'", "applicationId 'com.Parad1st.game'")
-              content = content.replace('applicationId "com.Parad1stgames.game"', "applicationId 'com.Parad1st.game'")
+              # Fix 2: applicationId (lowercase p in parad1stgames!)
+              content = content.replace("applicationId 'com.parad1stgames.game'", "applicationId 'com.Parad1st.game'")
+              content = content.replace('applicationId "com.parad1stgames.game"', "applicationId 'com.Parad1st.game'")
+              # Fix 3: namespace
+              content = content.replace("namespace 'com.byparad1st.game'", "namespace 'com.Parad1st.game'")
+              content = content.replace('namespace "com.byparad1st.game"', "namespace 'com.Parad1st.game'")
               if content != orig:
                   with open(path, 'w', encoding='utf-8') as f:
                       f.write(content)
@@ -82,6 +87,15 @@ jobs:
           fix('app/src/main/AndroidManifest.xml')
           print(f'=== FIXED {fixed} FILES ===')
           PYEOF
+
+      - name: Verify fixes
+        run: |
+          echo "=== build.gradle applicationId ==="
+          grep "applicationId" app/build.gradle || true
+          echo "=== build.gradle namespace ==="
+          grep "namespace" app/build.gradle || true
+          echo "=== AndroidManifest GTASA ==="
+          grep "GTASA" app/src/main/AndroidManifest.xml || true
 
       - name: Set up Java
         uses: actions/setup-java@v4
