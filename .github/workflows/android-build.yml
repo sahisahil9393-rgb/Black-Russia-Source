@@ -16,18 +16,14 @@ jobs:
       - name: Checkout your repo
         uses: actions/checkout@v4
 
-      # ── 1. FIX PROCESSOR SUPPORT (ABI Filters) ──
+      # ── 1. FIX ABI SUPPORT (Processor Support) ──
       - name: Fix ABI support in build.gradle
         run: |
           echo "=== FIXING ABI SUPPORT ==="
-          # إذا كان build.gradle يدّعي دعم arm64-v8a دون وجود الملفات، نُصلحه
-          if grep -q "arm64-v8a" app/build.gradle || grep -q "x86" app/build.gradle; then
-            echo "Found unsupported ABI claims, fixing..."
-            # نستبدل abiFilters ليدعم فقط armeabi-v7a (لأن الملفات متوفرة له فقط)
-            sed -i 's/abiFilters.*//' app/build.gradle
-            sed -i '/ndk {/,/}/c\            ndk {\n                abiFilters "armeabi-v7a"\n            }' app/build.gradle
-            echo "ABI fixed to armeabi-v7a only"
-          fi
+          # إزالة أي ادعاء كاذب بدعم arm64-v8a أو x86
+          sed -i 's/abiFilters.*//' app/build.gradle
+          sed -i '/ndk {/,/}/c\            ndk {\n                abiFilters "armeabi-v7a"\n            }' app/build.gradle
+          echo "ABI fixed to armeabi-v7a only"
           grep -A5 "abiFilters" app/build.gradle || true
 
       # ── 2. REMOVE applicationIdSuffix ──
@@ -37,35 +33,52 @@ jobs:
           echo "=== applicationIdSuffix REMOVED ==="
           grep -A3 "productFlavors" app/build.gradle || true
 
-      # ── 3. REPLACE SERVER LIST FILES FROM ORIGINAL PROJECT ──
-      - name: Replace server list files from main project
+      # ── 3. CREATE LOCAL server.json & stories.json ──
+      - name: Create local server list files
         run: |
-          echo "=== REPLACING SERVER LIST FILES ==="
-          BASE_ORIGINAL="https://raw.githubusercontent.com/rustixme-png/Black-Russia-Source/main"
+          echo "=== CREATING LOCAL SERVER FILES ==="
+          mkdir -p app/src/main/assets
           
-          # استبدال server.json إن وجد
-          if curl -sL "$BASE_ORIGINAL/app/src/main/assets/server.json" -o "app/src/main/assets/server.json"; then
-            echo "server.json replaced from main project"
+          # إنشاء server.json محلي بسيرفرك
+          cat > app/src/main/assets/server.json << 'EOF'
+          [
+            {
+              "color": "FF0000",
+              "dopname": "MATRESHKA RP",
+              "maxonline": 1000,
+              "name": "MATRESHKA",
+              "online": 0
+            }
+          ]
+          EOF
+          
+          # إنشاء stories.json فارغ
+          cat > app/src/main/assets/stories.json << 'EOF'
+          []
+          EOF
+          
+          echo "Local server.json and stories.json created"
+
+      # ── 4. PATCH Interface.java TO USE LOCAL FILES ──
+      - name: Patch Interface.java to use local server files
+        run: |
+          echo "=== PATCHING Interface.java ==="
+          INTERFACE_FILE="app/src/main/java/com/blackrussia/launcher/other/Interface.java"
+          
+          if [ -f "$INTERFACE_FILE" ]; then
+            # استبدال أي رابط Pastebin/Dropbox/Cloud برابط محلي
+            sed -i 's|https://[^\"]*pastebin[^\"]*|file:///android_asset/server.json|g' "$INTERFACE_FILE"
+            sed -i 's|https://[^\"]*dropbox[^\"]*|file:///android_asset/server.json|g' "$INTERFACE_FILE"
+            sed -i 's|https://[^\"]*blackrussia[^\"]*|file:///android_asset/server.json|g' "$INTERFACE_FILE"
+            sed -i 's|https://[^\"]*cdn[^\"]*|file:///android_asset/stories.json|g' "$INTERFACE_FILE"
+            echo "Interface.java patched successfully"
+            grep -n "server.json\|stories.json" "$INTERFACE_FILE" || true
           else
-            echo "server.json not found in main project, keeping local"
-          fi
-          
-          # استبدال Interface.java إن وجد (يحتوي على روابط server.json)
-          mkdir -p app/src/main/java/com/blackrussia/launcher/other
-          if curl -sL "$BASE_ORIGINAL/app/src/main/java/com/blackrussia/launcher/other/Interface.java" -o "app/src/main/java/com/blackrussia/launcher/other/Interface.java"; then
-            echo "Interface.java replaced from main project"
-          else
-            echo "Interface.java not found in main project, trying alternative path..."
-            # جرب مسار Parad1st إذا كان مختلفاً
-            curl -sL "https://raw.githubusercontent.com/Parad1st/Black-Russia-Source/main/app/src/main/java/com/blackrussia/launcher/other/Interface.java" -o "app/src/main/java/com/blackrussia/launcher/other/Interface.java" || true
-          fi
-          
-          # استبدال أي ملفات stories.json
-          if curl -sL "$BASE_ORIGINAL/app/src/main/assets/stories.json" -o "app/src/main/assets/stories.json"; then
-            echo "stories.json replaced from main project"
+            echo "WARNING: Interface.java not found at $INTERFACE_FILE"
+            find app/src/main/java -name "Interface.java" || true
           fi
 
-      # ── 4. Download FRESH .so files (armeabi-v7a only) ──
+      # ── 5. Download FRESH .so files (armeabi-v7a only) ──
       - name: Download fresh .so files
         run: |
           echo "=== DOWNLOADING FRESH .so FILES ==="
@@ -83,12 +96,12 @@ jobs:
             echo "  $f ($SIZE bytes) OK"
           done
           
-          # إزالة أي مجلدات ABI فارغة/غير مدعومة لتجنب الادعاء الكاذب
+          # إزالة أي مجلدات ABI فارغة/غير مدعومة
           rm -rf app/src/main/jniLibs/arm64-v8a
           rm -rf app/src/main/jniLibs/x86
           rm -rf app/src/main/jniLibs/x86_64
 
-      # ── 5. INSPECT .so files ──
+      # ── 6. INSPECT .so files ──
       - name: Inspect .so files for IP
         run: |
           echo "=== INSPECTING .so FILES ==="
@@ -123,7 +136,7 @@ jobs:
                   print(f"  Port 2144 found: {count_2144} times")
           PYEOF
 
-      # ── 6. PATCH .so files ──
+      # ── 7. PATCH .so files ──
       - name: Patch .so binaries
         run: |
           echo "=== PATCHING .so FILES ==="
@@ -174,7 +187,7 @@ jobs:
                   print(f"  {filename}: Nothing to patch (already correct?)")
           PYEOF
 
-      # ── 7. REPLACE broken client with original ──
+      # ── 8. REPLACE broken client with original ──
       - name: Replace client
         run: |
           echo "=== REPLACING CLIENT ==="
@@ -202,7 +215,7 @@ jobs:
           PYEOF
           echo "Client replaced and fixed"
 
-      # ── 8. Fix launcher package names ──
+      # ── 9. Fix launcher package names ──
       - name: Fix launcher
         run: |
           python3 << 'PYEOF'
@@ -225,7 +238,7 @@ jobs:
           fix('app/src/main/AndroidManifest.xml')
           PYEOF
 
-      # ── 9. Verify ──
+      # ── 10. Verify ──
       - name: Verify
         run: |
           echo "=== applicationId ==="
@@ -236,10 +249,12 @@ jobs:
           grep 'package="' app/src/main/AndroidManifest.xml | head -1
           echo "=== Server files ==="
           ls -la app/src/main/assets/ || true
+          echo "=== Interface.java server links ==="
+          grep -n "server.json\|stories.json" app/src/main/java/com/blackrussia/launcher/other/Interface.java || true
           echo "=== ABI Check ==="
           grep -A3 "abiFilters" app/build.gradle || true
 
-      # ── 10. Build ──
+      # ── 11. Build ──
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -267,7 +282,7 @@ jobs:
           chmod +x ./gradlew
           ./gradlew clean assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log
 
-      # ── 11. Upload ──
+      # ── 12. Upload ──
       - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
