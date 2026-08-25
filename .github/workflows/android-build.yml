@@ -74,7 +74,11 @@ jobs:
 
       - name: Patch .so binaries
         run: |
-          python3 -c "import os, struct; SO_DIR='app/src/main/jniLibs/armeabi-v7a'; NEW_IP=bytes([94,23,168,153]); NEW_PORT=struct.pack('<H',2144); OLD_IPS=[bytes([65,108,99,34]),bytes([0,0,0,0]),bytes([127,0,0,1])]; OLD_PORTS=[struct.pack('<H',2369),struct.pack('<H',7777),struct.pack('<H',0)]; [(__import__('os').path.join(SO_DIR,f),(__import__('builtins').open(__import__('os').path.join(SO_DIR,f),'rb').read(),__import__('builtins').open(__import__('os').path.join(SO_DIR,f),'wb').write(__import__('builtins').bytearray(__import__('builtins').open(__import__('os').path.join(SO_DIR,f),'rb').read().replace(o,NEW_IP).replace(p,NEW_PORT)) for o in OLD_IPS for p in OLD_PORTS]) for f in __import__('os').listdir(SO_DIR) if f.endswith('.so')]"
+          python3 patch_so.py
+        env:
+          SO_DIR: app/src/main/jniLibs/armeabi-v7a
+          SERVER_IP: ${{ env.SERVER_IP }}
+          SERVER_PORT: ${{ env.SERVER_PORT }}
 
       - name: Set up Java
         uses: actions/setup-java@v4
