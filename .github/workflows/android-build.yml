@@ -32,17 +32,52 @@ jobs:
         run: |
           sed -i 's/com\.blackrussia\.launcher/com.Sahil.RP/g' app/src/main/java/com/nvidia/devtech/NvEventQueueActivity.java
 
-      # ── FIX PATHS: keep "LUXRUSSIA" subfolder inside getFilesDir() ──
-      - name: Fix MainActivity.java paths
+      # ── ADD PERMISSION REQUEST TO MainActivity.java ──
+      - name: Add storage permission request to MainActivity
         run: |
-          sed -i 's|getExternalFilesDir(null), "LUXRUSSIA"|getFilesDir(), "LUXRUSSIA"|g' app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java
-          sed -i 's|new File(getGameDir(), "SAMP/settings.ini")|new File(getFilesDir(), "LUXRUSSIA/SAMP/settings.ini")|g' app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java
-          sed -i 's|new File(getGameDir(), "texdb/gta3.img")|new File(getFilesDir(), "LUXRUSSIA/texdb/gta3.img")|g' app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java
+          python3 << 'PYEOF'
+          import re
 
-      - name: Fix LoaderActivity.java paths
-        run: |
-          sed -i 's|getExternalFilesDir(null), "LUXRUSSIA"|getFilesDir(), "LUXRUSSIA"|g' app/src/main/java/com/Parad1st/launcher/activity/LoaderActivity.java
-          sed -i 's|getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)|getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)|g' app/src/main/java/com/Parad1st/launcher/activity/LoaderActivity.java
+          with open('app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java', 'r') as f:
+              content = f.read()
+
+          # Add Settings import
+          if 'import android.provider.Settings;' not in content:
+              content = content.replace(
+                  'import android.os.Bundle;',
+                  'import android.os.Bundle;\nimport android.provider.Settings;'
+              )
+
+          # Replace permission check block to include MANAGE_EXTERNAL_STORAGE
+          old_block = '''if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+			if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED 
+				|| checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED 
+				|| checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_DENIED) {
+				requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.RECORD_AUDIO}, 1000);
+			}
+		}'''
+
+          new_block = '''if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+			if (!Environment.isExternalStorageManager()) {
+				Intent intent = new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
+				startActivity(intent);
+			}
+		}
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+			if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED 
+				|| checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED 
+				|| checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_DENIED) {
+				requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.RECORD_AUDIO}, 1000);
+			}
+		}'''
+
+          content = content.replace(old_block, new_block)
+
+          with open('app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java', 'w') as f:
+              f.write(content)
+
+          print("MainActivity.java patched with MANAGE_EXTERNAL_STORAGE request")
+          PYEOF
 
       - name: Create local server files
         run: |
@@ -75,7 +110,6 @@ jobs:
         run: |
           cat > patch_so.py << 'EOF'
           import os, struct
-          
           SO_DIR = 'app/src/main/jniLibs/armeabi-v7a'
           NEW_IP = bytes([94, 23, 168, 153])
           NEW_PORT = struct.pack('<H', 2144)
@@ -83,32 +117,18 @@ jobs:
           NEW_PACKAGE = b'com.Sahil.RP' + b'\x00' * 7
           OLD_IPS = [bytes([65,108,99,34]), bytes([0,0,0,0]), bytes([127,0,0,1])]
           OLD_PORTS = [struct.pack('<H',2369), struct.pack('<H',7777), struct.pack('<H',0)]
-          
           for filename in os.listdir(SO_DIR):
-              if not filename.endswith('.so'):
-                  continue
+              if not filename.endswith('.so'): continue
               filepath = os.path.join(SO_DIR, filename)
-              with open(filepath, 'rb') as f:
-                  data = bytearray(f.read())
-              
-              if OLD_PACKAGE in data:
-                  data = data.replace(OLD_PACKAGE, NEW_PACKAGE)
-                  print(f"  {filename}: Package name patched")
-              
+              with open(filepath, 'rb') as f: data = bytearray(f.read())
+              if OLD_PACKAGE in data: data = data.replace(OLD_PACKAGE, NEW_PACKAGE); print(f"  {filename}: Package name patched")
               for old_ip in OLD_IPS:
                   count = data.count(old_ip)
-                  if count > 0:
-                      data = data.replace(old_ip, NEW_IP)
-                      print(f"  {filename}: IP patched ({count}x)")
-              
+                  if count > 0: data = data.replace(old_ip, NEW_IP); print(f"  {filename}: IP patched ({count}x)")
               for old_port in OLD_PORTS:
                   count = data.count(old_port)
-                  if count > 0:
-                      data = data.replace(old_port, NEW_PORT)
-                      print(f"  {filename}: Port patched ({count}x)")
-              
-              with open(filepath, 'wb') as f:
-                  f.write(data)
+                  if count > 0: data = data.replace(old_port, NEW_PORT); print(f"  {filename}: Port patched ({count}x)")
+              with open(filepath, 'wb') as f: f.write(data)
           EOF
 
       - name: Patch .so binaries
@@ -138,7 +158,6 @@ jobs:
         run: |
           chmod +x ./gradlew
           ./gradlew clean assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log
-          find app/build/outputs -name "*.apk" -type f
 
       - name: Upload build log
         if: always()
