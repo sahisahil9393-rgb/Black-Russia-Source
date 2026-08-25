@@ -87,8 +87,7 @@ jobs:
           print(f'=== FIXED {fixed} FILES ===')
           PYEOF
 
-      # ── FIX GTASA.java to load native libraries ──
-      - name: Fix GTASA.java to load game
+      - name: Fix GTASA.java
         run: |
           echo "=== FIXING GTASA.java ==="
           cat > app/src/main/java/com/Parad1st/game/core/GTASA.java << 'JAVAEOF'
@@ -106,7 +105,7 @@ jobs:
               }
 
               @Override
-              protected void onCreate(Bundle savedInstanceState) {
+              public void onCreate(Bundle savedInstanceState) {
                   super.onCreate(savedInstanceState);
                   getWindow().getDecorView().setSystemUiVisibility(
                       View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
@@ -116,16 +115,14 @@ jobs:
               }
           }
           JAVAEOF
-          echo "GTASA.java patched to extend NvEventQueueActivity and load .so libraries"
+          echo "GTASA.java fixed"
 
       - name: Verify
         run: |
-          echo "=== GTASA.java contents ==="
+          echo "=== GTASA.java ==="
           cat app/src/main/java/com/Parad1st/game/core/GTASA.java
           echo "=== applicationId ==="
           grep "applicationId" app/build.gradle
-          echo "=== GTASA in Manifest ==="
-          grep "GTASA" app/src/main/AndroidManifest.xml
 
       - name: Set up Java
         uses: actions/setup-java@v4
