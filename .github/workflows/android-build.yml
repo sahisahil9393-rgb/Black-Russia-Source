@@ -1,4 +1,4 @@
-name: Build MATRESHKARP (Final Ultimate Fix v2)
+name: Build MATRESHKARP (Final Fix - External Storage)
 
 on:
   workflow_dispatch:
@@ -19,7 +19,6 @@ jobs:
       # ── 1. FIX build.gradle ──
       - name: Fix build.gradle
         run: |
-          echo "=== FIXING build.gradle ==="
           sed -i "s/applicationId 'com\\.parad1stgames\\.game'/applicationId 'com.byparad1st.game'/g" app/build.gradle
           sed -i "s/namespace 'com\\.parad1stgames\\.game'/namespace 'com.byparad1st.game'/g" app/build.gradle
           
@@ -35,37 +34,36 @@ jobs:
           sed -i "s/abiFilters 'armeabi-v7a', 'arm64-v8a'/abiFilters 'armeabi-v7a'/g" app/build.gradle
           echo "build.gradle fixed"
 
-      # ── 2. FIX AndroidManifest.xml ──
+      # ── 2. FIX AndroidManifest.xml (ADD MANAGE_EXTERNAL_STORAGE) ──
       - name: Fix AndroidManifest.xml
         run: |
           sed -i 's/package="com\.parad1stgames\.game"/package="com.byparad1st.game"/g' app/src/main/AndroidManifest.xml
-          echo "Manifest fixed"
+          
+          # إضافة صلاحية MANAGE_EXTERNAL_STORAGE لـ Android 11+
+          sed -i 's|<uses-permission android:name="android.permission.RECORD_AUDIO" />|<uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />|g' app/src/main/AndroidManifest.xml
+          
+          echo "Manifest fixed with MANAGE_EXTERNAL_STORAGE"
 
       # ── 3. FIX NvEventQueueActivity.java ──
       - name: Fix NvEventQueueActivity
         run: |
           sed -i 's/com\.blackrussia\.launcher/com.byparad1st.game/g' app/src/main/java/com/nvidia/devtech/NvEventQueueActivity.java
-          echo "NvEventQueueActivity fixed"
 
       # ── 4. FIX MainActivity.java TO USE EXTERNAL STORAGE ──
       - name: Fix MainActivity.java paths
         run: |
-          echo "=== FIXING MainActivity.java PATHS ==="
           python3 << 'PYEOF'
           with open('app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java', 'r') as f:
               content = f.read()
           
-          # استبدال getExternalFilesDir(null) بـ Environment.getExternalStorageDirectory()
           content = content.replace(
               'private File getGameDir() {\n\t\treturn new File(getExternalFilesDir(null), "LUXRUSSIA");\n\t}',
               'private File getGameDir() {\n\t\treturn new File(Environment.getExternalStorageDirectory(), "LUXRUSSIA");\n\t}'
           )
-          
           content = content.replace(
               'private File getSettingsFile() {\n\t\treturn new File(getGameDir(), "SAMP/settings.ini");\n\t}',
               'private File getSettingsFile() {\n\t\treturn new File(Environment.getExternalStorageDirectory() + "/LUXRUSSIA/SAMP/settings.ini");\n\t}'
           )
-          
           content = content.replace(
               'private File getGameCheckFile() {\n\t\treturn new File(getGameDir(), "texdb/gta3.img");\n\t}',
               'private File getGameCheckFile() {\n\t\treturn new File(Environment.getExternalStorageDirectory() + "/LUXRUSSIA/texdb/gta3.img");\n\t}'
@@ -73,14 +71,11 @@ jobs:
           
           with open('app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java', 'w') as f:
               f.write(content)
-          
-          print("MainActivity.java paths fixed")
           PYEOF
 
       # ── 5. FIX LoaderActivity.java TO USE EXTERNAL STORAGE ──
       - name: Fix LoaderActivity.java paths
         run: |
-          echo "=== FIXING LoaderActivity.java PATHS ==="
           python3 << 'PYEOF'
           with open('app/src/main/java/com/Parad1st/launcher/activity/LoaderActivity.java', 'r') as f:
               content = f.read()
@@ -89,22 +84,18 @@ jobs:
               'private File getGameDir() {\n\t\treturn new File(getExternalFilesDir(null), "LUXRUSSIA");\n\t}',
               'private File getGameDir() {\n\t\treturn new File(Environment.getExternalStorageDirectory(), "LUXRUSSIA");\n\t}'
           )
-          
           content = content.replace(
               'folder = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);',
               'folder = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);'
           )
-          
           content = content.replace(
               'String mInputFilePath = new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "black-cache.7z").getAbsolutePath();',
               'String mInputFilePath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS) + "/black-cache.7z";'
           )
-          
           content = content.replace(
               'Utils.delete(new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "black-cache.7z"));',
               'Utils.delete(new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS) + "/black-cache.7z"));'
           )
-          
           content = content.replace(
               'Utils.delete(new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "black-cache.7z.temp"));',
               'Utils.delete(new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS) + "/black-cache.7z.temp"));'
@@ -112,11 +103,51 @@ jobs:
           
           with open('app/src/main/java/com/Parad1st/launcher/activity/LoaderActivity.java', 'w') as f:
               f.write(content)
-          
-          print("LoaderActivity.java paths fixed")
           PYEOF
 
-      # ── 6. CREATE LOCAL server.json & stories.json ──
+      # ── 6. ADD MANAGE_EXTERNAL_STORAGE REQUEST TO MainActivity ──
+      - name: Add storage permission request to MainActivity
+        run: |
+          python3 << 'PYEOF'
+          with open('app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java', 'r') as f:
+              content = f.read()
+          
+          # إضافة استيراد Settings
+          if 'import android.provider.Settings;' not in content:
+              content = content.replace(
+                  'import android.os.Bundle;',
+                  'import android.os.Bundle;\nimport android.provider.Settings;'
+              )
+          
+          # إضافة طلب صلاحية MANAGE_EXTERNAL_STORAGE في onCreate
+          old_check = '''if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+\t\t\tif (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED 
+\t\t\t\t|| checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED 
+\t\t\t\t|| checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_DENIED) {
+\t\t\t\trequestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.RECORD_AUDIO}, 1000);
+\t\t\t}
+\t\t}'''
+          
+          new_check = '''if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+\t\t\tif (!Environment.isExternalStorageManager()) {
+\t\t\t\tstartActivity(new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION));
+\t\t\t}
+\t\t}
+\t\tif (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+\t\t\tif (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED 
+\t\t\t\t|| checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED 
+\t\t\t\t|| checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_DENIED) {
+\t\t\t\trequestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.RECORD_AUDIO}, 1000);
+\t\t\t}
+\t\t}'''
+          
+          content = content.replace(old_check, new_check)
+          
+          with open('app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java', 'w') as f:
+              f.write(content)
+          PYEOF
+
+      # ── 7. CREATE LOCAL server.json & stories.json ──
       - name: Create local server files
         run: |
           mkdir -p app/src/main/assets
@@ -127,7 +158,7 @@ jobs:
           []
           EOF
 
-      # ── 7. PATCH Interface.java ──
+      # ── 8. PATCH Interface.java ──
       - name: Patch Interface.java
         run: |
           INTERFACE="app/src/main/java/com/Parad1st/launcher/other/Interface.java"
@@ -138,7 +169,7 @@ jobs:
             sed -i 's|https://raw.githubusercontent.com/Parad1st/Black-Russia-Source/main/Json%20files/music.json|file:///android_asset/stories.json|g' "$INTERFACE"
           fi
 
-      # ── 8. Download .so files ──
+      # ── 9. Download .so files ──
       - name: Download fresh .so files
         run: |
           SO_DIR="app/src/main/jniLibs/armeabi-v7a"
@@ -152,7 +183,7 @@ jobs:
           done
           rm -rf app/src/main/jniLibs/arm64-v8a app/src/main/jniLibs/x86 app/src/main/jniLibs/x86_64
 
-      # ── 9. PATCH .so files ──
+      # ── 10. PATCH .so files ──
       - name: Patch .so binaries
         run: |
           python3 << 'PYEOF'
@@ -175,7 +206,7 @@ jobs:
               with open(filepath, "wb") as f: f.write(data)
           PYEOF
 
-      # ── 10. Build ──
+      # ── 11. Build ──
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -201,7 +232,7 @@ jobs:
           chmod +x ./gradlew
           ./gradlew clean assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log
 
-      # ── 11. Upload ──
+      # ── 12. Upload ──
       - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
