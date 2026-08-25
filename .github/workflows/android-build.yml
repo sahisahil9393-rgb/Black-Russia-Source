@@ -16,41 +16,53 @@ jobs:
       - name: Checkout your repo
         uses: actions/checkout@v4
 
-      - name: Change package name to com.Sahil.RP
+      # ── 1. CHANGE applicationId ONLY (don't touch Java packages) ──
+      - name: Fix build.gradle
         run: |
           sed -i "s/applicationId 'com\\.parad1stgames\\.game'/applicationId 'com.Sahil.RP'/g" app/build.gradle
           sed -i "s/namespace 'com\\.parad1stgames\\.game'/namespace 'com.Sahil.RP'/g" app/build.gradle
           sed -i '/applicationIdSuffix/d' app/build.gradle
           sed -i "s/abiFilters 'armeabi-v7a', 'arm64-v8a'/abiFilters 'armeabi-v7a'/g" app/build.gradle
+
+      - name: Fix AndroidManifest.xml
+        run: |
           sed -i 's/package="com\.parad1stgames\.game"/package="com.Sahil.RP"/g' app/src/main/AndroidManifest.xml
-          find app/src/main/java -type f -name "*.java" -exec sed -i 's/com\.byparad1st\.game/com.Sahil.RP/g' {} +
-          find app/src/main/java -type f -name "*.java" -exec sed -i 's/com\.Parad1st\.launcher/com.Sahil.launcher/g' {} +
-          find app/src/main/java -type f -name "*.java" -exec sed -i 's/com\.byparad1st\.launcher/com.Sahil.launcher/g' {} +
+          sed -i 's|<uses-permission android:name="android.permission.RECORD_AUDIO" />|<uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />|g' app/src/main/AndroidManifest.xml
+
+      # ── 2. FIX NvEventQueueActivity (package reference only) ──
+      - name: Fix NvEventQueueActivity
+        run: |
           sed -i 's/com\.blackrussia\.launcher/com.Sahil.RP/g' app/src/main/java/com/nvidia/devtech/NvEventQueueActivity.java
 
-      - name: Fix paths to internal storage
+      # ── 3. FIX PATHS IN LAUNCHER ACTIVITIES (use internal storage) ──
+      - name: Fix MainActivity.java paths
         run: |
-          find app/src/main/java -type f -name "MainActivity.java" -exec sed -i 's|Environment.getExternalStorageDirectory(), "LUXRUSSIA"|getFilesDir()|g' {} +
-          find app/src/main/java -type f -name "MainActivity.java" -exec sed -i 's|Environment.getExternalStorageDirectory() + "/LUXRUSSIA/SAMP/settings.ini"|new File(getFilesDir(), "SAMP/settings.ini").getAbsolutePath()|g' {} +
-          find app/src/main/java -type f -name "MainActivity.java" -exec sed -i 's|Environment.getExternalStorageDirectory() + "/LUXRUSSIA/texdb/gta3.img"|new File(getFilesDir(), "texdb/gta3.img").getAbsolutePath()|g' {} +
-          find app/src/main/java -type f -name "LoaderActivity.java" -exec sed -i 's|Environment.getExternalStorageDirectory(), "LUXRUSSIA"|getFilesDir()|g' {} +
-          find app/src/main/java -type f -name "LoaderActivity.java" -exec sed -i 's|Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)|getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)|g' {} +
+          sed -i 's|getExternalFilesDir(null), "LUXRUSSIA"|getFilesDir()|g' app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java
+          sed -i 's|new File(getGameDir(), "SAMP/settings.ini")|new File(getFilesDir(), "SAMP/settings.ini")|g' app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java
+          sed -i 's|new File(getGameDir(), "texdb/gta3.img")|new File(getFilesDir(), "texdb/gta3.img")|g' app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java
 
+      - name: Fix LoaderActivity.java paths
+        run: |
+          sed -i 's|getExternalFilesDir(null), "LUXRUSSIA"|getFilesDir()|g' app/src/main/java/com/Parad1st/launcher/activity/LoaderActivity.java
+          sed -i 's|getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)|getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)|g' app/src/main/java/com/Parad1st/launcher/activity/LoaderActivity.java
+
+      # ── 4. CREATE LOCAL SERVER FILES ──
       - name: Create local server files
         run: |
           mkdir -p app/src/main/assets
           echo '[{"color":"FF0000","dopname":"SAHIL RP","maxonline":1000,"name":"SAHIL","online":0}]' > app/src/main/assets/server.json
           echo '[]' > app/src/main/assets/stories.json
 
+      # ── 5. PATCH Interface.java ──
       - name: Patch Interface.java
         run: |
-          for path in app/src/main/java/com/Sahil/launcher/other/Interface.java app/src/main/java/com/Parad1st/launcher/other/Interface.java app/src/main/java/com/byparad1st/launcher/other/Interface.java; do
-            if [ -f "$path" ]; then
-              sed -i 's|https://raw.githubusercontent.com/Parad1st/Black-Russia-Source/main/Json%20files/servers.json|file:///android_asset/server.json|g' "$path"
-              sed -i 's|https://raw.githubusercontent.com/Parad1st/Black-Russia-Source/main/Json%20files/stories.json|file:///android_asset/stories.json|g' "$path"
-            fi
-          done
+          INTERFACE="app/src/main/java/com/Parad1st/launcher/other/Interface.java"
+          if [ -f "$INTERFACE" ]; then
+            sed -i 's|https://raw.githubusercontent.com/Parad1st/Black-Russia-Source/main/Json%20files/servers.json|file:///android_asset/server.json|g' "$INTERFACE"
+            sed -i 's|https://raw.githubusercontent.com/Parad1st/Black-Russia-Source/main/Json%20files/stories.json|file:///android_asset/stories.json|g' "$INTERFACE"
+          fi
 
+      # ── 6. DOWNLOAD .SO FILES ──
       - name: Download .so files
         run: |
           SO_DIR="app/src/main/jniLibs/armeabi-v7a"
@@ -64,26 +76,12 @@ jobs:
           done
           rm -rf app/src/main/jniLibs/arm64-v8a app/src/main/jniLibs/x86 app/src/main/jniLibs/x86_64
 
+      # ── 7. PATCH .SO BINARIES (IP + PORT + PACKAGE NAME) ──
       - name: Patch .so binaries
         run: |
-          python3 -c "
-          import os, struct
-          SO_DIR = 'app/src/main/jniLibs/armeabi-v7a'
-          NEW_IP = bytes([94, 23, 168, 153])
-          NEW_PORT = struct.pack('<H', 2144)
-          OLD_IPS = [bytes([65,108,99,34]), bytes([0,0,0,0]), bytes([127,0,0,1])]
-          OLD_PORTS = [struct.pack('<H',2369), struct.pack('<H',7777), struct.pack('<H',0)]
-          for f in os.listdir(SO_DIR):
-              if not f.endswith('.so'): continue
-              fp = os.path.join(SO_DIR, f)
-              with open(fp, 'rb') as file: data = bytearray(file.read())
-              for old_ip in OLD_IPS:
-                  if old_ip in data: data = data.replace(old_ip, NEW_IP)
-              for old_port in OLD_PORTS:
-                  if old_port in data: data = data.replace(old_port, NEW_PORT)
-              with open(fp, 'wb') as file: file.write(data)
-          "
+          python3 -c "import os, struct; SO_DIR='app/src/main/jniLibs/armeabi-v7a'; NEW_IP=bytes([94,23,168,153]); NEW_PORT=struct.pack('<H',2144); OLD_PACKAGE=b'com.byparad1st.game'; NEW_PACKAGE=b'com.Sahil.RP' + b'\x00' * 7; OLD_IPS=[bytes([65,108,99,34]),bytes([0,0,0,0]),bytes([127,0,0,1])]; OLD_PORTS=[struct.pack('<H',2369),struct.pack('<H',7777),struct.pack('<H',0)]; [(__import__('builtins').open(os.path.join(SO_DIR,f),'wb').write(__import__('builtins').bytearray(__import__('builtins').open(os.path.join(SO_DIR,f),'rb').read().replace(OLD_PACKAGE,NEW_PACKAGE).replace(OLD_IPS[0],NEW_IP).replace(OLD_IPS[1],NEW_IP).replace(OLD_IPS[2],NEW_IP).replace(OLD_PORTS[0],NEW_PORT).replace(OLD_PORTS[1],NEW_PORT).replace(OLD_PORTS[2],NEW_PORT))) for f in os.listdir(SO_DIR) if f.endswith('.so')]"
 
+      # ── 8. BUILD ──
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -108,7 +106,10 @@ jobs:
         run: |
           chmod +x ./gradlew
           ./gradlew clean assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log
+          echo "=== APK LOCATION ==="
+          find app/build/outputs -name "*.apk" -type f
 
+      # ── 9. UPLOAD (flexible path) ──
       - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
@@ -121,5 +122,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: sahil-rp-release
-          path: app/build/outputs/apk/ver/release/*.apk
-          if-no-files-found: error
+          path: app/build/outputs/apk/**/*.apk
+          if-no-files-found: warn
