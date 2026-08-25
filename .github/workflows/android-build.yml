@@ -1,4 +1,4 @@
-name: Build MATRESHKARP (Ultimate Fix)
+name: Build MATRESHKARP (Final Ultimate Fix v2)
 
 on:
   workflow_dispatch:
@@ -16,138 +16,145 @@ jobs:
       - name: Checkout your repo
         uses: actions/checkout@v4
 
-      # ── 1. FIX build.gradle COMPLETELY ──
-      - name: Fix build.gradle (applicationId + ABI + namespace)
+      # ── 1. FIX build.gradle ──
+      - name: Fix build.gradle
         run: |
           echo "=== FIXING build.gradle ==="
-          
-          # 1. إصلاح applicationId
           sed -i "s/applicationId 'com\\.parad1stgames\\.game'/applicationId 'com.byparad1st.game'/g" app/build.gradle
-          
-          # 2. إصلاح namespace
           sed -i "s/namespace 'com\\.parad1stgames\\.game'/namespace 'com.byparad1st.game'/g" app/build.gradle
           
-          # 3. إزالة applicationIdSuffix نهائياً
           python3 << 'PYEOF'
           import re
           with open('app/build.gradle', 'r') as f:
               content = f.read()
-          # حذف كل سطر يحتوي applicationIdSuffix
           content = re.sub(r'.*applicationIdSuffix.*\n?', '', content)
           with open('app/build.gradle', 'w') as f:
               f.write(content)
           PYEOF
           
-          # 4. إصلاح abiFilters لـ armeabi-v7a فقط
           sed -i "s/abiFilters 'armeabi-v7a', 'arm64-v8a'/abiFilters 'armeabi-v7a'/g" app/build.gradle
-          
-          echo "=== VERIFY build.gradle ==="
-          grep -n "applicationId\|applicationIdSuffix\|abiFilters\|namespace" app/build.gradle
+          echo "build.gradle fixed"
 
       # ── 2. FIX AndroidManifest.xml ──
       - name: Fix AndroidManifest.xml
         run: |
-          echo "=== FIXING AndroidManifest.xml ==="
           sed -i 's/package="com\.parad1stgames\.game"/package="com.byparad1st.game"/g' app/src/main/AndroidManifest.xml
           echo "Manifest fixed"
 
       # ── 3. FIX NvEventQueueActivity.java ──
-      - name: Fix NvEventQueueActivity package reference
+      - name: Fix NvEventQueueActivity
         run: |
-          echo "=== FIXING NvEventQueueActivity.java ==="
           sed -i 's/com\.blackrussia\.launcher/com.byparad1st.game/g' app/src/main/java/com/nvidia/devtech/NvEventQueueActivity.java
           echo "NvEventQueueActivity fixed"
-          grep -n "getLaunchIntentForPackage" app/src/main/java/com/nvidia/devtech/NvEventQueueActivity.java || true
 
-      # ── 4. CREATE LOCAL server.json & stories.json ──
+      # ── 4. FIX MainActivity.java TO USE EXTERNAL STORAGE ──
+      - name: Fix MainActivity.java paths
+        run: |
+          echo "=== FIXING MainActivity.java PATHS ==="
+          python3 << 'PYEOF'
+          with open('app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java', 'r') as f:
+              content = f.read()
+          
+          # استبدال getExternalFilesDir(null) بـ Environment.getExternalStorageDirectory()
+          content = content.replace(
+              'private File getGameDir() {\n\t\treturn new File(getExternalFilesDir(null), "LUXRUSSIA");\n\t}',
+              'private File getGameDir() {\n\t\treturn new File(Environment.getExternalStorageDirectory(), "LUXRUSSIA");\n\t}'
+          )
+          
+          content = content.replace(
+              'private File getSettingsFile() {\n\t\treturn new File(getGameDir(), "SAMP/settings.ini");\n\t}',
+              'private File getSettingsFile() {\n\t\treturn new File(Environment.getExternalStorageDirectory() + "/LUXRUSSIA/SAMP/settings.ini");\n\t}'
+          )
+          
+          content = content.replace(
+              'private File getGameCheckFile() {\n\t\treturn new File(getGameDir(), "texdb/gta3.img");\n\t}',
+              'private File getGameCheckFile() {\n\t\treturn new File(Environment.getExternalStorageDirectory() + "/LUXRUSSIA/texdb/gta3.img");\n\t}'
+          )
+          
+          with open('app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java', 'w') as f:
+              f.write(content)
+          
+          print("MainActivity.java paths fixed")
+          PYEOF
+
+      # ── 5. FIX LoaderActivity.java TO USE EXTERNAL STORAGE ──
+      - name: Fix LoaderActivity.java paths
+        run: |
+          echo "=== FIXING LoaderActivity.java PATHS ==="
+          python3 << 'PYEOF'
+          with open('app/src/main/java/com/Parad1st/launcher/activity/LoaderActivity.java', 'r') as f:
+              content = f.read()
+          
+          content = content.replace(
+              'private File getGameDir() {\n\t\treturn new File(getExternalFilesDir(null), "LUXRUSSIA");\n\t}',
+              'private File getGameDir() {\n\t\treturn new File(Environment.getExternalStorageDirectory(), "LUXRUSSIA");\n\t}'
+          )
+          
+          content = content.replace(
+              'folder = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);',
+              'folder = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);'
+          )
+          
+          content = content.replace(
+              'String mInputFilePath = new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "black-cache.7z").getAbsolutePath();',
+              'String mInputFilePath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS) + "/black-cache.7z";'
+          )
+          
+          content = content.replace(
+              'Utils.delete(new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "black-cache.7z"));',
+              'Utils.delete(new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS) + "/black-cache.7z"));'
+          )
+          
+          content = content.replace(
+              'Utils.delete(new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "black-cache.7z.temp"));',
+              'Utils.delete(new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS) + "/black-cache.7z.temp"));'
+          )
+          
+          with open('app/src/main/java/com/Parad1st/launcher/activity/LoaderActivity.java', 'w') as f:
+              f.write(content)
+          
+          print("LoaderActivity.java paths fixed")
+          PYEOF
+
+      # ── 6. CREATE LOCAL server.json & stories.json ──
       - name: Create local server files
         run: |
-          echo "=== CREATING LOCAL SERVER FILES ==="
           mkdir -p app/src/main/assets
-          
           cat > app/src/main/assets/server.json << 'EOF'
-          [
-            {
-              "color": "FF0000",
-              "dopname": "MATRESHKA RP",
-              "maxonline": 1000,
-              "name": "MATRESHKA",
-              "online": 0
-            }
-          ]
+          [{"color":"FF0000","dopname":"MATRESHKA RP","maxonline":1000,"name":"MATRESHKA","online":0}]
           EOF
-          
           cat > app/src/main/assets/stories.json << 'EOF'
           []
           EOF
-          
-          echo "Local server files created"
 
-      # ── 5. PATCH Interface.java TO USE LOCAL FILES ──
-      - name: Patch Interface.java to use local files
+      # ── 7. PATCH Interface.java ──
+      - name: Patch Interface.java
         run: |
-          echo "=== PATCHING Interface.java ==="
-          INTERFACE_FILE="app/src/main/java/com/Parad1st/launcher/other/Interface.java"
-          if [ -f "$INTERFACE_FILE" ]; then
-            # استبدال روابط GitHub بملفات محلية
-            sed -i 's|https://raw.githubusercontent.com/Parad1st/Black-Russia-Source/main/Json%20files/servers.json|file:///android_asset/server.json|g' "$INTERFACE_FILE"
-            sed -i 's|https://raw.githubusercontent.com/Parad1st/Black-Russia-Source/main/Json%20files/stories.json|file:///android_asset/stories.json|g' "$INTERFACE_FILE"
-            sed -i 's|https://raw.githubusercontent.com/Parad1st/Black-Russia-Source/main/Json%20files/donate.json|file:///android_asset/server.json|g' "$INTERFACE_FILE"
-            sed -i 's|https://raw.githubusercontent.com/Parad1st/Black-Russia-Source/main/Json%20files/music.json|file:///android_asset/stories.json|g' "$INTERFACE_FILE"
-            echo "Interface.java patched successfully"
-          else
-            echo "Interface.java not found!"
+          INTERFACE="app/src/main/java/com/Parad1st/launcher/other/Interface.java"
+          if [ -f "$INTERFACE" ]; then
+            sed -i 's|https://raw.githubusercontent.com/Parad1st/Black-Russia-Source/main/Json%20files/servers.json|file:///android_asset/server.json|g' "$INTERFACE"
+            sed -i 's|https://raw.githubusercontent.com/Parad1st/Black-Russia-Source/main/Json%20files/stories.json|file:///android_asset/stories.json|g' "$INTERFACE"
+            sed -i 's|https://raw.githubusercontent.com/Parad1st/Black-Russia-Source/main/Json%20files/donate.json|file:///android_asset/server.json|g' "$INTERFACE"
+            sed -i 's|https://raw.githubusercontent.com/Parad1st/Black-Russia-Source/main/Json%20files/music.json|file:///android_asset/stories.json|g' "$INTERFACE"
           fi
 
-      # ── 6. Download FRESH .so files (armeabi-v7a only) ──
+      # ── 8. Download .so files ──
       - name: Download fresh .so files
         run: |
-          echo "=== DOWNLOADING FRESH .so FILES ==="
           SO_DIR="app/src/main/jniLibs/armeabi-v7a"
           mkdir -p "$SO_DIR"
           BASE="https://raw.githubusercontent.com/Parad1st/Black-Russia-Source/main/app/src/main/jniLibs/armeabi-v7a"
-
           for f in libGTASA.so libImmEmulatorJ.so libSCAnd.so libbass.so libparad1st.so libsampvoice.so; do
             curl -sL "$BASE/$f" -o "$SO_DIR/$f"
             SIZE=$(stat -c%s "$SO_DIR/$f" 2>/dev/null || echo 0)
-            if [ "$SIZE" -lt 1000 ]; then
-              echo "ERROR: $f download failed ($SIZE bytes)"
-              exit 1
-            fi
-            echo "$f ($SIZE bytes) OK"
+            if [ "$SIZE" -lt 1000 ]; then echo "ERROR: $f"; exit 1; fi
+            echo "$f OK"
           done
-          
-          # حذف أي مجلدات ABI أخرى
           rm -rf app/src/main/jniLibs/arm64-v8a app/src/main/jniLibs/x86 app/src/main/jniLibs/x86_64
 
-      # ── 7. INSPECT .so files ──
-      - name: Inspect .so files for IP
-        run: |
-          echo "=== INSPECTING .so FILES ==="
-          python3 << 'PYEOF'
-          import os, struct, re
-          SO_DIR = "app/src/main/jniLibs/armeabi-v7a"
-          for filename in sorted(os.listdir(SO_DIR)):
-              if not filename.endswith('.so'): continue
-              filepath = os.path.join(SO_DIR, filename)
-              with open(filepath, "rb") as f: data = f.read()
-              print(f"\n{filename} ({len(data)} bytes):")
-              ascii_text = data.decode('latin-1', errors='ignore')
-              ip_pattern = re.compile(r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b')
-              ips = set(ip_pattern.findall(ascii_text))
-              if ips: print(f"  IP strings found: {sorted(ips)}")
-              port_2369 = struct.pack('<H', 2369)
-              count_2369 = data.count(port_2369)
-              if count_2369 > 0: print(f"  Port 2369 found: {count_2369} times")
-              port_2144 = struct.pack('<H', 2144)
-              count_2144 = data.count(port_2144)
-              if count_2144 > 0: print(f"  Port 2144 found: {count_2144} times")
-          PYEOF
-
-      # ── 8. PATCH .so files ──
+      # ── 9. PATCH .so files ──
       - name: Patch .so binaries
         run: |
-          echo "=== PATCHING .so FILES ==="
           python3 << 'PYEOF'
           import os, struct
           SO_DIR = "app/src/main/jniLibs/armeabi-v7a"
@@ -159,18 +166,16 @@ jobs:
               if not filename.endswith('.so'): continue
               filepath = os.path.join(SO_DIR, filename)
               with open(filepath, "rb") as f: data = bytearray(f.read())
-              patched = False
               for old_ip in OLD_IPS:
                   count = data.count(old_ip)
-                  if count > 0: data = data.replace(old_ip, NEW_IP); patched = True; print(f"  {filename}: IP patched ({count}x)")
+                  if count > 0: data = data.replace(old_ip, NEW_IP)
               for old_port in OLD_PORTS:
                   count = data.count(old_port)
-                  if count > 0: data = data.replace(old_port, NEW_PORT); patched = True; print(f"  {filename}: Port patched ({count}x)")
+                  if count > 0: data = data.replace(old_port, NEW_PORT)
               with open(filepath, "wb") as f: f.write(data)
-              if not patched: print(f"  {filename}: Nothing to patch")
           PYEOF
 
-      # ── 9. Build ──
+      # ── 10. Build ──
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -196,7 +201,7 @@ jobs:
           chmod +x ./gradlew
           ./gradlew clean assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log
 
-      # ── 10. Upload ──
+      # ── 11. Upload ──
       - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
