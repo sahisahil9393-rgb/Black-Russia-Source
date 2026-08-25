@@ -32,15 +32,17 @@ jobs:
         run: |
           sed -i 's/com\.blackrussia\.launcher/com.Sahil.RP/g' app/src/main/java/com/nvidia/devtech/NvEventQueueActivity.java
 
+      # ── FIX PATHS: keep "LUXRUSSIA" subfolder inside getFilesDir() ──
       - name: Fix MainActivity.java paths
         run: |
-          sed -i 's|getExternalFilesDir(null), "LUXRUSSIA"|getFilesDir()|g' app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java
-          sed -i 's|new File(getGameDir(), "SAMP/settings.ini")|new File(getFilesDir(), "SAMP/settings.ini")|g' app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java
-          sed -i 's|new File(getGameDir(), "texdb/gta3.img")|new File(getFilesDir(), "texdb/gta3.img")|g' app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java
+          sed -i 's|getExternalFilesDir(null), "LUXRUSSIA"|getFilesDir(), "LUXRUSSIA"|g' app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java
+          sed -i 's|new File(getGameDir(), "SAMP/settings.ini")|new File(getFilesDir(), "LUXRUSSIA/SAMP/settings.ini")|g' app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java
+          sed -i 's|new File(getGameDir(), "texdb/gta3.img")|new File(getFilesDir(), "LUXRUSSIA/texdb/gta3.img")|g' app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java
 
       - name: Fix LoaderActivity.java paths
         run: |
-          sed -i 's|getExternalFilesDir(null), "LUXRUSSIA"|getFilesDir()|g' app/src/main/java/com/Parad1st/launcher/activity/LoaderActivity.java
+          sed -i 's|getExternalFilesDir(null), "LUXRUSSIA"|getFilesDir(), "LUXRUSSIA"|g' app/src/main/java/com/Parad1st/launcher/activity/LoaderActivity.java
+          sed -i 's|getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)|getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)|g' app/src/main/java/com/Parad1st/launcher/activity/LoaderActivity.java
 
       - name: Create local server files
         run: |
