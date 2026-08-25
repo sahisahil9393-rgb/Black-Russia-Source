@@ -1,4 +1,4 @@
-name: Build MATRESHKARP
+name: Build MATRESHKARP (Fixed)
 
 on:
   workflow_dispatch:
@@ -16,18 +16,61 @@ jobs:
       - name: Checkout your repo
         uses: actions/checkout@v4
 
-      # ── 2. REMOVE applicationIdSuffix (simplify package name) ──
+      # ── 1. FIX PROCESSOR SUPPORT (ABI Filters) ──
+      - name: Fix ABI support in build.gradle
+        run: |
+          echo "=== FIXING ABI SUPPORT ==="
+          # إذا كان build.gradle يدّعي دعم arm64-v8a دون وجود الملفات، نُصلحه
+          if grep -q "arm64-v8a" app/build.gradle || grep -q "x86" app/build.gradle; then
+            echo "Found unsupported ABI claims, fixing..."
+            # نستبدل abiFilters ليدعم فقط armeabi-v7a (لأن الملفات متوفرة له فقط)
+            sed -i 's/abiFilters.*//' app/build.gradle
+            sed -i '/ndk {/,/}/c\            ndk {\n                abiFilters "armeabi-v7a"\n            }' app/build.gradle
+            echo "ABI fixed to armeabi-v7a only"
+          fi
+          grep -A5 "abiFilters" app/build.gradle || true
+
+      # ── 2. REMOVE applicationIdSuffix ──
       - name: Remove .ver suffix
         run: |
           sed -i '/applicationIdSuffix/d' app/build.gradle
           echo "=== applicationIdSuffix REMOVED ==="
           grep -A3 "productFlavors" app/build.gradle || true
 
-      # ── 3. Download FRESH .so from original repo ──
+      # ── 3. REPLACE SERVER LIST FILES FROM ORIGINAL PROJECT ──
+      - name: Replace server list files from main project
+        run: |
+          echo "=== REPLACING SERVER LIST FILES ==="
+          BASE_ORIGINAL="https://raw.githubusercontent.com/rustixme-png/Black-Russia-Source/main"
+          
+          # استبدال server.json إن وجد
+          if curl -sL "$BASE_ORIGINAL/app/src/main/assets/server.json" -o "app/src/main/assets/server.json"; then
+            echo "server.json replaced from main project"
+          else
+            echo "server.json not found in main project, keeping local"
+          fi
+          
+          # استبدال Interface.java إن وجد (يحتوي على روابط server.json)
+          mkdir -p app/src/main/java/com/blackrussia/launcher/other
+          if curl -sL "$BASE_ORIGINAL/app/src/main/java/com/blackrussia/launcher/other/Interface.java" -o "app/src/main/java/com/blackrussia/launcher/other/Interface.java"; then
+            echo "Interface.java replaced from main project"
+          else
+            echo "Interface.java not found in main project, trying alternative path..."
+            # جرب مسار Parad1st إذا كان مختلفاً
+            curl -sL "https://raw.githubusercontent.com/Parad1st/Black-Russia-Source/main/app/src/main/java/com/blackrussia/launcher/other/Interface.java" -o "app/src/main/java/com/blackrussia/launcher/other/Interface.java" || true
+          fi
+          
+          # استبدال أي ملفات stories.json
+          if curl -sL "$BASE_ORIGINAL/app/src/main/assets/stories.json" -o "app/src/main/assets/stories.json"; then
+            echo "stories.json replaced from main project"
+          fi
+
+      # ── 4. Download FRESH .so files (armeabi-v7a only) ──
       - name: Download fresh .so files
         run: |
           echo "=== DOWNLOADING FRESH .so FILES ==="
           SO_DIR="app/src/main/jniLibs/armeabi-v7a"
+          mkdir -p "$SO_DIR"
           BASE="https://raw.githubusercontent.com/Parad1st/Black-Russia-Source/main/app/src/main/jniLibs/armeabi-v7a"
 
           for f in libGTASA.so libImmEmulatorJ.so libSCAnd.so libbass.so libparad1st.so libsampvoice.so; do
@@ -39,8 +82,13 @@ jobs:
             fi
             echo "  $f ($SIZE bytes) OK"
           done
+          
+          # إزالة أي مجلدات ABI فارغة/غير مدعومة لتجنب الادعاء الكاذب
+          rm -rf app/src/main/jniLibs/arm64-v8a
+          rm -rf app/src/main/jniLibs/x86
+          rm -rf app/src/main/jniLibs/x86_64
 
-      # ── 4. INSPECT .so files (find what IP is actually inside) ──
+      # ── 5. INSPECT .so files ──
       - name: Inspect .so files for IP
         run: |
           echo "=== INSPECTING .so FILES ==="
@@ -56,30 +104,26 @@ jobs:
               with open(filepath, "rb") as f:
                   data = f.read()
 
-              print(f"
-{filename} ({len(data)} bytes):")
+              print(f"\n{filename} ({len(data)} bytes):")
 
-              # Search for IP text patterns
               ascii_text = data.decode('latin-1', errors='ignore')
-              ip_pattern = re.compile(r'(?:[0-9]{1,3}\.){3}[0-9]{1,3}')
+              ip_pattern = re.compile(r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b')
               ips = set(ip_pattern.findall(ascii_text))
               if ips:
                   print(f"  IP strings found: {sorted(ips)}")
 
-              # Search for port 2369 (0x0941) as uint16 LE
               port_2369 = struct.pack('<H', 2369)
               count_2369 = data.count(port_2369)
               if count_2369 > 0:
                   print(f"  Port 2369 found: {count_2369} times")
 
-              # Search for port 2144 (0x0860) as uint16 LE
               port_2144 = struct.pack('<H', 2144)
               count_2144 = data.count(port_2144)
               if count_2144 > 0:
                   print(f"  Port 2144 found: {count_2144} times")
           PYEOF
 
-      # ── 5. PATCH .so files ──
+      # ── 6. PATCH .so files ──
       - name: Patch .so binaries
         run: |
           echo "=== PATCHING .so FILES ==="
@@ -90,9 +134,8 @@ jobs:
           NEW_IP = bytes([94, 23, 168, 153])
           NEW_PORT = struct.pack('<H', 2144)
 
-          # Try multiple old IPs
           OLD_IPS = [
-              bytes([65, 108, 99, 34]),    # 65.108.99.34
+              bytes([65, 108, 99, 34]),
               bytes([0, 0, 0, 0]),
               bytes([127, 0, 0, 1]),
           ]
@@ -131,7 +174,7 @@ jobs:
                   print(f"  {filename}: Nothing to patch (already correct?)")
           PYEOF
 
-      # ── 6. REPLACE broken client with original ──
+      # ── 7. REPLACE broken client with original ──
       - name: Replace client
         run: |
           echo "=== REPLACING CLIENT ==="
@@ -140,13 +183,11 @@ jobs:
 
           BASE="https://raw.githubusercontent.com/Parad1st/Black-Russia-Source/main/app/src/main/java/com/Parad1st"
 
-          # Download critical files
           for f in game/core/GTASA.java game/core/Config.java game/core/Utils.java; do
             curl -sL "$BASE/$f" -o "app/src/main/java/com/Parad1st/$f"
             echo "  $f"
           done
 
-          # Fix package names in downloaded client
           python3 << 'PYEOF'
           import os
           for root, dirs, files in os.walk('app/src/main/java/com/Parad1st/game'):
@@ -159,10 +200,9 @@ jobs:
                       with open(path, 'w') as f:
                           f.write(content)
           PYEOF
-
           echo "Client replaced and fixed"
 
-      # ── 7. Fix launcher package names ──
+      # ── 8. Fix launcher package names ──
       - name: Fix launcher
         run: |
           python3 << 'PYEOF'
@@ -185,7 +225,7 @@ jobs:
           fix('app/src/main/AndroidManifest.xml')
           PYEOF
 
-      # ── 8. Verify ──
+      # ── 9. Verify ──
       - name: Verify
         run: |
           echo "=== applicationId ==="
@@ -194,8 +234,12 @@ jobs:
           head -15 app/src/main/java/com/Parad1st/game/core/GTASA.java
           echo "=== package ==="
           grep 'package="' app/src/main/AndroidManifest.xml | head -1
+          echo "=== Server files ==="
+          ls -la app/src/main/assets/ || true
+          echo "=== ABI Check ==="
+          grep -A3 "abiFilters" app/build.gradle || true
 
-      # ── 9. Build ──
+      # ── 10. Build ──
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -223,7 +267,7 @@ jobs:
           chmod +x ./gradlew
           ./gradlew clean assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log
 
-      # ── 10. Upload ──
+      # ── 11. Upload ──
       - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
