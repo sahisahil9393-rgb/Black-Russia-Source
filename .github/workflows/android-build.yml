@@ -16,49 +16,79 @@ jobs:
       - name: Checkout your repo
         uses: actions/checkout@v4
 
-      - name: Download fresh .so files
-        run: |
-          echo "Downloading fresh .so files..."
-          SO_DIR="app/src/main/jniLibs/armeabi-v7a"
-          BASE="https://raw.githubusercontent.com/Parad1st/Black-Russia-Source/main/app/src/main/jniLibs/armeabi-v7a"
-          for f in libGTASA.so libImmEmulatorJ.so libSCAnd.so libbass.so libparad1st.so libsampvoice.so; do
-            curl -sL "$BASE/$f" -o "$SO_DIR/$f"
-            echo "  $f ($(stat -c%s "$SO_DIR/$f") bytes)"
-          done
-
+      # ── 2. Patch .so binaries (IP as 4 raw bytes + Port as uint16 LE) ──
       - name: Patch .so binaries
         run: |
           IP="${{ env.SERVER_IP }}"
           PORT="${{ env.SERVER_PORT }}"
-          echo "Patching .so for IP: $IP:$PORT"
+          echo "Patching .so files for IP: $IP:$PORT"
           python3 << 'PYEOF'
-          import os, struct
+          import os
+          import struct
+
           SO_DIR = "app/src/main/jniLibs/armeabi-v7a"
-          NEW_IP = b"94.23.168.153"
+
+          # IP as 4 raw bytes (e.g., 94.23.168.153 -> [94, 23, 168, 153])
+          NEW_IP = bytes([94, 23, 168, 153])
+
+          # Port as uint16 little-endian (e.g., 2144 -> [0x60, 0x08])
           NEW_PORT = struct.pack('<H', 2144)
-          OLD_IP = b"65.108.99.34"
-          OLD_PORT = struct.pack('<H', 2369)
+
+          # Old IPs to search for (as 4 raw bytes)
+          OLD_IPS = [
+              bytes([65, 108, 99, 34]),    # 65.108.99.34
+              bytes([0, 0, 0, 0]),          # 0.0.0.0
+              bytes([127, 0, 0, 1]),        # 127.0.0.1
+          ]
+
+          # Old ports to search for (as uint16 LE)
+          OLD_PORTS = [
+              struct.pack('<H', 2369),      # 0x0941
+              struct.pack('<H', 7777),      # 0x1E61
+              struct.pack('<H', 0),         # 0x0000
+          ]
+
+          patched_files = []
+
           for filename in os.listdir(SO_DIR):
               if not filename.endswith('.so'):
                   continue
+
               filepath = os.path.join(SO_DIR, filename)
               with open(filepath, "rb") as f:
                   data = bytearray(f.read())
-              ip_done = False
-              port_done = False
-              if OLD_IP in data:
-                  padded = NEW_IP.ljust(len(OLD_IP), b'\x00')
-                  data = data.replace(OLD_IP, padded)
-                  ip_done = True
-              if OLD_PORT in data:
-                  data = data.replace(OLD_PORT, NEW_PORT)
-                  port_done = True
-              with open(filepath, "wb") as f:
-                  f.write(data)
-              if ip_done or port_done:
-                  print(f"  {filename}: IP={ip_done}, Port={port_done}")
+
+              ip_patched = False
+              port_patched = False
+
+              # Patch IP (as 4 raw bytes)
+              for old_ip in OLD_IPS:
+                  count = data.count(old_ip)
+                  if count > 0:
+                      data = data.replace(old_ip, NEW_IP)
+                      ip_patched = True
+                      print(f"  {filename}: Replaced {count}x IP {list(old_ip)} -> {list(NEW_IP)}")
+
+              # Patch Port (as uint16 LE)
+              for old_port in OLD_PORTS:
+                  count = data.count(old_port)
+                  if count > 0:
+                      data = data.replace(old_port, NEW_PORT)
+                      port_patched = True
+                      print(f"  {filename}: Replaced {count}x Port {old_port.hex()} -> {NEW_PORT.hex()}")
+
+              if ip_patched or port_patched:
+                  with open(filepath, "wb") as f:
+                      f.write(data)
+                  patched_files.append(filename)
+
+          if patched_files:
+              print(f"\nPatched: {', '.join(patched_files)}")
+          else:
+              print("\nWARNING: No patches applied. .so files may already be correct or use different format.")
           PYEOF
 
+      # ── 3. Fix package names ──
       - name: Fix package names
         run: |
           echo "=== FIXING PACKAGE NAMES ==="
@@ -87,6 +117,7 @@ jobs:
           print(f'=== FIXED {fixed} FILES ===')
           PYEOF
 
+      # ── 4. Fix GTASA.java to load game ──
       - name: Fix GTASA.java
         run: |
           echo "=== FIXING GTASA.java ==="
@@ -117,13 +148,17 @@ jobs:
           JAVAEOF
           echo "GTASA.java fixed"
 
+      # ── 5. Verify ──
       - name: Verify
         run: |
           echo "=== GTASA.java ==="
           cat app/src/main/java/com/Parad1st/game/core/GTASA.java
           echo "=== applicationId ==="
           grep "applicationId" app/build.gradle
+          echo "=== GTASA in Manifest ==="
+          grep "GTASA" app/src/main/AndroidManifest.xml
 
+      # ── 6. Java + SDK ──
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -139,6 +174,7 @@ jobs:
           sdkmanager "platforms;android-34" "build-tools;34.0.0"
           sdkmanager --licenses < /dev/null || true
 
+      # ── 7. Keystore + Build ──
       - name: Delete old keystore
         run: rm -f app/edgar.jks
 
@@ -151,6 +187,7 @@ jobs:
           chmod +x ./gradlew
           ./gradlew clean assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log
 
+      # ── 8. Upload ──
       - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
