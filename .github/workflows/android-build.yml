@@ -1,4 +1,4 @@
-name: Build MATRESHKARP (Fixed)
+name: Build MATRESHKARP (Fixed v3)
 
 on:
   workflow_dispatch:
@@ -16,30 +16,37 @@ jobs:
       - name: Checkout your repo
         uses: actions/checkout@v4
 
-      # ── 1. FIX ABI SUPPORT (Processor Support) ──
-      - name: Fix ABI support in build.gradle
+      # ── 1. FIX ABI SUPPORT (المعالج) ──
+      - name: Fix ABI support
         run: |
           echo "=== FIXING ABI SUPPORT ==="
           # إزالة أي ادعاء كاذب بدعم arm64-v8a أو x86
           sed -i 's/abiFilters.*//' app/build.gradle
           sed -i '/ndk {/,/}/c\            ndk {\n                abiFilters "armeabi-v7a"\n            }' app/build.gradle
+          # حذف مجلدات ABI الفارغة/غير المدعومة
+          rm -rf app/src/main/jniLibs/arm64-v8a app/src/main/jniLibs/x86 app/src/main/jniLibs/x86_64
           echo "ABI fixed to armeabi-v7a only"
-          grep -A5 "abiFilters" app/build.gradle || true
 
-      # ── 2. REMOVE applicationIdSuffix ──
-      - name: Remove .ver suffix
+      # ── 2. FIX applicationId ليتوافق مع الـ Java CODE ──
+      - name: Fix applicationId to match Java code
         run: |
-          sed -i '/applicationIdSuffix/d' app/build.gradle
-          echo "=== applicationIdSuffix REMOVED ==="
-          grep -A3 "productFlavors" app/build.gradle || true
+          echo "=== FIXING applicationId ==="
+          # الـ Java code يستخدم com.byparad1st.game، فيجب أن يكون applicationId نفسه
+          sed -i 's/applicationId "com\.parad1stgames\.game"/applicationId "com.byparad1st.game"/g' app/build.gradle
+          sed -i "s/namespace 'com\.parad1stgames\.game'/namespace 'com.byparad1st.game'/g" app/build.gradle
+          sed -i 's/package="com\.parad1stgames\.game"/package="com.byparad1st.game"/g' app/src/main/AndroidManifest.xml
+          echo "applicationId fixed to com.byparad1st.game"
+          echo "=== build.gradle ==="
+          grep "applicationId\|namespace" app/build.gradle | head -5
+          echo "=== AndroidManifest.xml ==="
+          grep 'package=' app/src/main/AndroidManifest.xml | head -1
 
       # ── 3. CREATE LOCAL server.json & stories.json ──
-      - name: Create local server list files
+      - name: Create local server files
         run: |
           echo "=== CREATING LOCAL SERVER FILES ==="
           mkdir -p app/src/main/assets
           
-          # إنشاء server.json محلي بسيرفرك
           cat > app/src/main/assets/server.json << 'EOF'
           [
             {
@@ -52,31 +59,34 @@ jobs:
           ]
           EOF
           
-          # إنشاء stories.json فارغ
           cat > app/src/main/assets/stories.json << 'EOF'
           []
           EOF
           
-          echo "Local server.json and stories.json created"
+          echo "Local server files created"
+          ls -la app/src/main/assets/
 
       # ── 4. PATCH Interface.java TO USE LOCAL FILES ──
-      - name: Patch Interface.java to use local server files
+      - name: Patch Interface.java links
         run: |
           echo "=== PATCHING Interface.java ==="
-          INTERFACE_FILE="app/src/main/java/com/blackrussia/launcher/other/Interface.java"
-          
-          if [ -f "$INTERFACE_FILE" ]; then
-            # استبدال أي رابط Pastebin/Dropbox/Cloud برابط محلي
-            sed -i 's|https://[^\"]*pastebin[^\"]*|file:///android_asset/server.json|g' "$INTERFACE_FILE"
-            sed -i 's|https://[^\"]*dropbox[^\"]*|file:///android_asset/server.json|g' "$INTERFACE_FILE"
-            sed -i 's|https://[^\"]*blackrussia[^\"]*|file:///android_asset/server.json|g' "$INTERFACE_FILE"
-            sed -i 's|https://[^\"]*cdn[^\"]*|file:///android_asset/stories.json|g' "$INTERFACE_FILE"
-            echo "Interface.java patched successfully"
-            grep -n "server.json\|stories.json" "$INTERFACE_FILE" || true
-          else
-            echo "WARNING: Interface.java not found at $INTERFACE_FILE"
-            find app/src/main/java -name "Interface.java" || true
-          fi
+          # ابحث عن Interface.java في كل المسارات الممكنة
+          for path in \
+            "app/src/main/java/com/blackrussia/launcher/other/Interface.java" \
+            "app/src/main/java/com/Parad1st/launcher/other/Interface.java" \
+            "app/src/main/java/com/byparad1st/launcher/other/Interface.java"
+          do
+            if [ -f "$path" ]; then
+              echo "Found Interface.java at: $path"
+              sed -i 's|https://[^\"]*pastebin[^\"]*|file:///android_asset/server.json|g' "$path"
+              sed -i 's|https://[^\"]*dropbox[^\"]*|file:///android_asset/server.json|g' "$path"
+              sed -i 's|https://[^\"]*blackrussia[^\"]*|file:///android_asset/server.json|g' "$path"
+              sed -i 's|https://[^\"]*cdn[^\"]*|file:///android_asset/stories.json|g' "$path"
+              echo "Patched successfully"
+              grep -n "android_asset" "$path" || true
+              break
+            fi
+          done
 
       # ── 5. Download FRESH .so files (armeabi-v7a only) ──
       - name: Download fresh .so files
@@ -90,16 +100,11 @@ jobs:
             curl -sL "$BASE/$f" -o "$SO_DIR/$f"
             SIZE=$(stat -c%s "$SO_DIR/$f" 2>/dev/null || echo 0)
             if [ "$SIZE" -lt 1000 ]; then
-              echo "  ERROR: $f download failed ($SIZE bytes)"
+              echo "ERROR: $f download failed ($SIZE bytes)"
               exit 1
             fi
-            echo "  $f ($SIZE bytes) OK"
+            echo "$f ($SIZE bytes) OK"
           done
-          
-          # إزالة أي مجلدات ABI فارغة/غير مدعومة
-          rm -rf app/src/main/jniLibs/arm64-v8a
-          rm -rf app/src/main/jniLibs/x86
-          rm -rf app/src/main/jniLibs/x86_64
 
       # ── 6. INSPECT .so files ──
       - name: Inspect .so files for IP
@@ -107,33 +112,22 @@ jobs:
           echo "=== INSPECTING .so FILES ==="
           python3 << 'PYEOF'
           import os, struct, re
-
           SO_DIR = "app/src/main/jniLibs/armeabi-v7a"
-
           for filename in sorted(os.listdir(SO_DIR)):
-              if not filename.endswith('.so'):
-                  continue
+              if not filename.endswith('.so'): continue
               filepath = os.path.join(SO_DIR, filename)
-              with open(filepath, "rb") as f:
-                  data = f.read()
-
+              with open(filepath, "rb") as f: data = f.read()
               print(f"\n{filename} ({len(data)} bytes):")
-
               ascii_text = data.decode('latin-1', errors='ignore')
               ip_pattern = re.compile(r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b')
               ips = set(ip_pattern.findall(ascii_text))
-              if ips:
-                  print(f"  IP strings found: {sorted(ips)}")
-
+              if ips: print(f"  IP strings found: {sorted(ips)}")
               port_2369 = struct.pack('<H', 2369)
               count_2369 = data.count(port_2369)
-              if count_2369 > 0:
-                  print(f"  Port 2369 found: {count_2369} times")
-
+              if count_2369 > 0: print(f"  Port 2369 found: {count_2369} times")
               port_2144 = struct.pack('<H', 2144)
               count_2144 = data.count(port_2144)
-              if count_2144 > 0:
-                  print(f"  Port 2144 found: {count_2144} times")
+              if count_2144 > 0: print(f"  Port 2144 found: {count_2144} times")
           PYEOF
 
       # ── 7. PATCH .so files ──
@@ -142,119 +136,27 @@ jobs:
           echo "=== PATCHING .so FILES ==="
           python3 << 'PYEOF'
           import os, struct
-
           SO_DIR = "app/src/main/jniLibs/armeabi-v7a"
           NEW_IP = bytes([94, 23, 168, 153])
           NEW_PORT = struct.pack('<H', 2144)
-
-          OLD_IPS = [
-              bytes([65, 108, 99, 34]),
-              bytes([0, 0, 0, 0]),
-              bytes([127, 0, 0, 1]),
-          ]
-          OLD_PORTS = [
-              struct.pack('<H', 2369),
-              struct.pack('<H', 7777),
-              struct.pack('<H', 0),
-          ]
-
+          OLD_IPS = [bytes([65, 108, 99, 34]), bytes([0, 0, 0, 0]), bytes([127, 0, 0, 1])]
+          OLD_PORTS = [struct.pack('<H', 2369), struct.pack('<H', 7777), struct.pack('<H', 0)]
           for filename in os.listdir(SO_DIR):
-              if not filename.endswith('.so'):
-                  continue
+              if not filename.endswith('.so'): continue
               filepath = os.path.join(SO_DIR, filename)
-              with open(filepath, "rb") as f:
-                  data = bytearray(f.read())
-
+              with open(filepath, "rb") as f: data = bytearray(f.read())
               patched = False
               for old_ip in OLD_IPS:
                   count = data.count(old_ip)
-                  if count > 0:
-                      data = data.replace(old_ip, NEW_IP)
-                      patched = True
-                      print(f"  {filename}: IP patched ({count}x)")
-
+                  if count > 0: data = data.replace(old_ip, NEW_IP); patched = True; print(f"  {filename}: IP patched ({count}x)")
               for old_port in OLD_PORTS:
                   count = data.count(old_port)
-                  if count > 0:
-                      data = data.replace(old_port, NEW_PORT)
-                      patched = True
-                      print(f"  {filename}: Port patched ({count}x)")
-
-              with open(filepath, "wb") as f:
-                  f.write(data)
-
-              if not patched:
-                  print(f"  {filename}: Nothing to patch (already correct?)")
+                  if count > 0: data = data.replace(old_port, NEW_PORT); patched = True; print(f"  {filename}: Port patched ({count}x)")
+              with open(filepath, "wb") as f: f.write(data)
+              if not patched: print(f"  {filename}: Nothing to patch")
           PYEOF
 
-      # ── 8. REPLACE broken client with original ──
-      - name: Replace client
-        run: |
-          echo "=== REPLACING CLIENT ==="
-          rm -rf app/src/main/java/com/Parad1st/game
-          mkdir -p app/src/main/java/com/Parad1st/game/core
-
-          BASE="https://raw.githubusercontent.com/Parad1st/Black-Russia-Source/main/app/src/main/java/com/Parad1st"
-
-          for f in game/core/GTASA.java game/core/Config.java game/core/Utils.java; do
-            curl -sL "$BASE/$f" -o "app/src/main/java/com/Parad1st/$f"
-            echo "  $f"
-          done
-
-          python3 << 'PYEOF'
-          import os
-          for root, dirs, files in os.walk('app/src/main/java/com/Parad1st/game'):
-              for file in files:
-                  if file.endswith('.java'):
-                      path = os.path.join(root, file)
-                      with open(path, 'r') as f:
-                          content = f.read()
-                      content = content.replace('com.byparad1st', 'com.Parad1st')
-                      with open(path, 'w') as f:
-                          f.write(content)
-          PYEOF
-          echo "Client replaced and fixed"
-
-      # ── 9. Fix launcher package names ──
-      - name: Fix launcher
-        run: |
-          python3 << 'PYEOF'
-          import os
-          def fix(path):
-              with open(path, 'r') as f:
-                  content = f.read()
-              orig = content
-              content = content.replace('com.byparad1st', 'com.Parad1st')
-              content = content.replace("namespace 'com.byparad1st.game'", "namespace 'com.Parad1st.game'")
-              content = content.replace('package="com.byparad1st.game"', 'package="com.Parad1st.game"')
-              if content != orig:
-                  with open(path, 'w') as f:
-                      f.write(content)
-          for root, dirs, files in os.walk('app/src/main/java/com/Parad1st/launcher'):
-              for file in files:
-                  if file.endswith('.java'):
-                      fix(os.path.join(root, file))
-          fix('app/build.gradle')
-          fix('app/src/main/AndroidManifest.xml')
-          PYEOF
-
-      # ── 10. Verify ──
-      - name: Verify
-        run: |
-          echo "=== applicationId ==="
-          grep "applicationId" app/build.gradle
-          echo "=== GTASA.java ==="
-          head -15 app/src/main/java/com/Parad1st/game/core/GTASA.java
-          echo "=== package ==="
-          grep 'package="' app/src/main/AndroidManifest.xml | head -1
-          echo "=== Server files ==="
-          ls -la app/src/main/assets/ || true
-          echo "=== Interface.java server links ==="
-          grep -n "server.json\|stories.json" app/src/main/java/com/blackrussia/launcher/other/Interface.java || true
-          echo "=== ABI Check ==="
-          grep -A3 "abiFilters" app/build.gradle || true
-
-      # ── 11. Build ──
+      # ── 8. Build ──
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -270,11 +172,9 @@ jobs:
           sdkmanager "platforms;android-34" "build-tools;34.0.0"
           sdkmanager --licenses < /dev/null || true
 
-      - name: Delete old keystore
-        run: rm -f app/edgar.jks
-
       - name: Create debug keystore
         run: |
+          rm -f app/edgar.jks
           keytool -genkey -v -keystore app/edgar.jks -alias key0 -keyalg RSA -keysize 2048 -validity 10000 -storepass edgar333 -keypass edgar333 -dname "CN=Debug, OU=Debug, O=Debug, L=Debug, S=Debug, C=US"
 
       - name: Build release APK
@@ -282,7 +182,7 @@ jobs:
           chmod +x ./gradlew
           ./gradlew clean assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log
 
-      # ── 12. Upload ──
+      # ── 9. Upload ──
       - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
