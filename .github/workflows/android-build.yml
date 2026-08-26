@@ -32,15 +32,18 @@ jobs:
         run: |
           sed -i 's/com\.blackrussia\.launcher/com.Sahil.RP/g' app/src/main/java/com/nvidia/devtech/NvEventQueueActivity.java
 
-      - name: Replace MainActivity & LoaderActivity from Parad1st
+      # ── FIX YOUR EXISTING FILES (don't replace, just fix paths) ──
+      - name: Fix MainActivity.java paths (keep package name)
         run: |
-          BASE="https://raw.githubusercontent.com/Parad1st/Black-Russia-Source/main/app/src/main/java/com/Parad1st/launcher/activity"
-          curl -sL "$BASE/MainActivity.java" -o /tmp/MainActivity.java
-          curl -sL "$BASE/LoaderActivity.java" -o /tmp/LoaderActivity.java
-          sed -i 's/com\.byparad1st\.game/com.Sahil.RP/g' /tmp/MainActivity.java /tmp/LoaderActivity.java
-          sed -i 's/com\.byparad1st\.launcher/com.Sahil.launcher/g' /tmp/MainActivity.java /tmp/LoaderActivity.java
-          cp /tmp/MainActivity.java app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java
-          cp /tmp/LoaderActivity.java app/src/main/java/com/Parad1st/launcher/activity/LoaderActivity.java
+          # Only fix paths, DO NOT touch package names!
+          sed -i 's|getExternalFilesDir(null), "LUXRUSSIA"|Environment.getExternalStorageDirectory(), "LUXRUSSIA"|g' app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java
+          sed -i 's|new File(getGameDir(), "SAMP/settings.ini")|new File(Environment.getExternalStorageDirectory(), "LUXRUSSIA/SAMP/settings.ini")|g' app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java
+          sed -i 's|new File(getGameDir(), "texdb/gta3.img")|new File(Environment.getExternalStorageDirectory(), "LUXRUSSIA/texdb/gta3.img")|g' app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java
+
+      - name: Fix LoaderActivity.java paths (keep package name)
+        run: |
+          sed -i 's|getExternalFilesDir(null), "LUXRUSSIA"|Environment.getExternalStorageDirectory(), "LUXRUSSIA"|g' app/src/main/java/com/Parad1st/launcher/activity/LoaderActivity.java
+          sed -i 's|getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)|Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)|g' app/src/main/java/com/Parad1st/launcher/activity/LoaderActivity.java
 
       - name: Create local server files
         run: |
@@ -102,8 +105,6 @@ jobs:
           ./gradlew clean assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log
           echo "=== APK FILES ==="
           find app/build/outputs -name "*.apk" -type f
-          echo "=== APK SIZE ==="
-          find app/build/outputs -name "*.apk" -type f -exec ls -lh {} \;
 
       - name: Upload build log
         if: always()
