@@ -27,24 +27,32 @@ jobs:
         run: |
           sed -i 's/package="com\.parad1stgames\.game"/package="com.Sahil.RP"/g' app/src/main/AndroidManifest.xml
           sed -i 's|<uses-permission android:name="android.permission.RECORD_AUDIO" />|<uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />|g' app/src/main/AndroidManifest.xml
-          sed -i 's|android:theme="@style/Theme.AppCompat.NoActionBar">|android:theme="@style/Theme.AppCompat.NoActionBar"\n        android:requestLegacyExternalStorage="true"\n        android:preserveLegacyExternalStorage="true">|g' app/src/main/AndroidManifest.xml
 
       - name: Fix NvEventQueueActivity
         run: |
           sed -i 's/com\.blackrussia\.launcher/com.Sahil.RP/g' app/src/main/java/com/nvidia/devtech/NvEventQueueActivity.java
 
-      # ── FIX ALL JAVA FILES TO USE EXTERNAL PATH ──
-      - name: Fix all Java files to use external storage
+      # ── REPLACE MainActivity & LoaderActivity FROM PARAD1ST (external path) ──
+      - name: Replace launcher activities from Parad1st
         run: |
-          echo "=== FIXING ALL JAVA FILES ==="
-          find app/src/main/java -type f -name "*.java" -exec sed -i 's|getExternalFilesDir(null), "LUXRUSSIA"|"/storage/emulated/0/LUXRUSSIA"|g' {} +
-          find app/src/main/java -type f -name "*.java" -exec sed -i 's|getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)|new File("/storage/emulated/0/Download")|g' {} +
-          echo "All Java files fixed"
-
-      - name: Add permission request to MainActivity
-        run: |
-          sed -i 's/import android.os.Bundle;/import android.os.Bundle;\nimport android.provider.Settings;\nimport android.net.Uri;/g' app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java
-          sed -i 's|if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {|if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {\n\t\t\tif (!Environment.isExternalStorageManager()) {\n\t\t\t\tIntent intent = new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);\n\t\t\t\tstartActivity(intent);\n\t\t\t}\n\t\t}\n\t\tif (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {|g' app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java
+          echo "=== REPLACING WITH PARAD1ST VERSIONS ==="
+          BASE="https://raw.githubusercontent.com/Parad1st/Black-Russia-Source/main/app/src/main/java/com/Parad1st/launcher/activity"
+          
+          # Download Parad1st versions (use EXTERNAL path)
+          curl -sL "$BASE/MainActivity.java" -o /tmp/MainActivity.java
+          curl -sL "$BASE/LoaderActivity.java" -o /tmp/LoaderActivity.java
+          
+          # Replace package names in downloaded files
+          sed -i 's/com\.byparad1st\.game/com.Sahil.RP/g' /tmp/MainActivity.java
+          sed -i 's/com\.byparad1st\.game/com.Sahil.RP/g' /tmp/LoaderActivity.java
+          sed -i 's/com\.byparad1st\.launcher/com.Sahil.launcher/g' /tmp/MainActivity.java
+          sed -i 's/com\.byparad1st\.launcher/com.Sahil.launcher/g' /tmp/LoaderActivity.java
+          
+          # Copy to project
+          cp /tmp/MainActivity.java app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java
+          cp /tmp/LoaderActivity.java app/src/main/java/com/Parad1st/launcher/activity/LoaderActivity.java
+          
+          echo "Replaced with Parad1st versions (external storage path)"
 
       - name: Create local server files
         run: |
