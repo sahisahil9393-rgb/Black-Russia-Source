@@ -32,27 +32,15 @@ jobs:
         run: |
           sed -i 's/com\.blackrussia\.launcher/com.Sahil.RP/g' app/src/main/java/com/nvidia/devtech/NvEventQueueActivity.java
 
-      # ── REPLACE MainActivity & LoaderActivity FROM PARAD1ST (external path) ──
-      - name: Replace launcher activities from Parad1st
+      - name: Replace MainActivity & LoaderActivity from Parad1st
         run: |
-          echo "=== REPLACING WITH PARAD1ST VERSIONS ==="
           BASE="https://raw.githubusercontent.com/Parad1st/Black-Russia-Source/main/app/src/main/java/com/Parad1st/launcher/activity"
-          
-          # Download Parad1st versions (use EXTERNAL path)
           curl -sL "$BASE/MainActivity.java" -o /tmp/MainActivity.java
           curl -sL "$BASE/LoaderActivity.java" -o /tmp/LoaderActivity.java
-          
-          # Replace package names in downloaded files
-          sed -i 's/com\.byparad1st\.game/com.Sahil.RP/g' /tmp/MainActivity.java
-          sed -i 's/com\.byparad1st\.game/com.Sahil.RP/g' /tmp/LoaderActivity.java
-          sed -i 's/com\.byparad1st\.launcher/com.Sahil.launcher/g' /tmp/MainActivity.java
-          sed -i 's/com\.byparad1st\.launcher/com.Sahil.launcher/g' /tmp/LoaderActivity.java
-          
-          # Copy to project
+          sed -i 's/com\.byparad1st\.game/com.Sahil.RP/g' /tmp/MainActivity.java /tmp/LoaderActivity.java
+          sed -i 's/com\.byparad1st\.launcher/com.Sahil.launcher/g' /tmp/MainActivity.java /tmp/LoaderActivity.java
           cp /tmp/MainActivity.java app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java
           cp /tmp/LoaderActivity.java app/src/main/java/com/Parad1st/launcher/activity/LoaderActivity.java
-          
-          echo "Replaced with Parad1st versions (external storage path)"
 
       - name: Create local server files
         run: |
@@ -112,6 +100,10 @@ jobs:
         run: |
           chmod +x ./gradlew
           ./gradlew clean assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log
+          echo "=== APK FILES ==="
+          find app/build/outputs -name "*.apk" -type f
+          echo "=== APK SIZE ==="
+          find app/build/outputs -name "*.apk" -type f -exec ls -lh {} \;
 
       - name: Upload build log
         if: always()
@@ -125,5 +117,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: sahil-rp-release
-          path: app/build/outputs/apk/**/*.apk
+          path: |
+            app/build/outputs/apk/**/*.apk
+            app/build/outputs/apk/*/*.apk
+            app/build/outputs/apk/*/*/*.apk
           if-no-files-found: warn
