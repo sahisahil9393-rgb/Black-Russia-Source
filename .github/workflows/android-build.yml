@@ -32,18 +32,38 @@ jobs:
         run: |
           sed -i 's/com\.blackrussia\.launcher/com.Sahil.RP/g' app/src/main/java/com/nvidia/devtech/NvEventQueueActivity.java
 
-      # ── FIX YOUR EXISTING FILES (don't replace, just fix paths) ──
-      - name: Fix MainActivity.java paths (keep package name)
+      - name: Fix Java files to use external storage
         run: |
-          # Only fix paths, DO NOT touch package names!
-          sed -i 's|getExternalFilesDir(null), "LUXRUSSIA"|Environment.getExternalStorageDirectory(), "LUXRUSSIA"|g' app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java
-          sed -i 's|new File(getGameDir(), "SAMP/settings.ini")|new File(Environment.getExternalStorageDirectory(), "LUXRUSSIA/SAMP/settings.ini")|g' app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java
-          sed -i 's|new File(getGameDir(), "texdb/gta3.img")|new File(Environment.getExternalStorageDirectory(), "LUXRUSSIA/texdb/gta3.img")|g' app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java
-
-      - name: Fix LoaderActivity.java paths (keep package name)
-        run: |
-          sed -i 's|getExternalFilesDir(null), "LUXRUSSIA"|Environment.getExternalStorageDirectory(), "LUXRUSSIA"|g' app/src/main/java/com/Parad1st/launcher/activity/LoaderActivity.java
-          sed -i 's|getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)|Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)|g' app/src/main/java/com/Parad1st/launcher/activity/LoaderActivity.java
+          python3 << 'EOF'
+          import os
+          
+          def fix_file(path, replacements):
+              with open(path, 'r') as f:
+                  content = f.read()
+              for old, new in replacements:
+                  if old in content:
+                      content = content.replace(old, new)
+                      print(f"  Replaced in {path}")
+                  else:
+                      print(f"  NOT FOUND in {path}: {old[:60]}")
+              with open(path, 'w') as f:
+                  f.write(content)
+          
+          fix_file('app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java', [
+              ('return new File(getExternalFilesDir(null), "LUXRUSSIA");', 'return new File(Environment.getExternalStorageDirectory(), "LUXRUSSIA");'),
+              ('return new File(getGameDir(), "SAMP/settings.ini");', 'return new File(Environment.getExternalStorageDirectory(), "LUXRUSSIA/SAMP/settings.ini");'),
+              ('return new File(getGameDir(), "texdb/gta3.img");', 'return new File(Environment.getExternalStorageDirectory(), "LUXRUSSIA/texdb/gta3.img");'),
+          ])
+          
+          fix_file('app/src/main/java/com/Parad1st/launcher/activity/LoaderActivity.java', [
+              ('return new File(getExternalFilesDir(null), "LUXRUSSIA");', 'return new File(Environment.getExternalStorageDirectory(), "LUXRUSSIA");'),
+              ('folder = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);', 'folder = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);'),
+              ('new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "black-cache.7z").getAbsolutePath()', 'new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "black-cache.7z").getAbsolutePath()'),
+              ('String mOutputPath = getGameDir().getAbsolutePath();', 'String mOutputPath = Environment.getExternalStorageDirectory().getAbsolutePath();'),
+              ('Utils.delete(new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "black-cache.7z"));', 'Utils.delete(new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "black-cache.7z"));'),
+              ('Utils.delete(new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "black-cache.7z.temp"));', 'Utils.delete(new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "black-cache.7z.temp"));'),
+          ])
+          EOF
 
       - name: Create local server files
         run: |
@@ -68,13 +88,34 @@ jobs:
             curl -sL "$BASE/$f" -o "$SO_DIR/$f"
             SIZE=$(stat -c%s "$SO_DIR/$f" 2>/dev/null || echo 0)
             if [ "$SIZE" -lt 1000 ]; then echo "ERROR: $f"; exit 1; fi
-            echo "$f OK"
+            echo "$f OK ($SIZE bytes)"
           done
           rm -rf app/src/main/jniLibs/arm64-v8a app/src/main/jniLibs/x86 app/src/main/jniLibs/x86_64
 
       - name: Create patch script
         run: |
-          printf '%s\n' 'import os, struct' 'SO_DIR = "app/src/main/jniLibs/armeabi-v7a"' 'NEW_IP = bytes([94, 23, 168, 153])' 'NEW_PORT = struct.pack("<H", 2144)' 'OLD_PACKAGE = b"com.byparad1st.game"' 'NEW_PACKAGE = b"com.Sahil.RP" + b"\x00" * 7' 'OLD_IPS = [bytes([65,108,99,34]), bytes([0,0,0,0]), bytes([127,0,0,1])]' 'OLD_PORTS = [struct.pack("<H",2369), struct.pack("<H",7777), struct.pack("<H",0)]' 'for filename in os.listdir(SO_DIR):' '    if not filename.endswith(".so"): continue' '    filepath = os.path.join(SO_DIR, filename)' '    with open(filepath, "rb") as f: data = bytearray(f.read())' '    if OLD_PACKAGE in data: data = data.replace(OLD_PACKAGE, NEW_PACKAGE); print(f"  {filename}: Package name patched")' '    for old_ip in OLD_IPS:' '        count = data.count(old_ip)' '        if count > 0: data = data.replace(old_ip, NEW_IP); print(f"  {filename}: IP patched ({count}x)")' '    for old_port in OLD_PORTS:' '        count = data.count(old_port)' '        if count > 0: data = data.replace(old_port, NEW_PORT); print(f"  {filename}: Port patched ({count}x)")' '    with open(filepath, "wb") as f: f.write(data)' > patch_so.py
+          cat > patch_so.py << 'PYEOF'
+          import os, struct
+          SO_DIR = 'app/src/main/jniLibs/armeabi-v7a'
+          NEW_IP = bytes([94, 23, 168, 153])
+          NEW_PORT = struct.pack('<H', 2144)
+          OLD_PACKAGE = b'com.byparad1st.game'
+          NEW_PACKAGE = b'com.Sahil.RP' + b'\x00' * 7
+          OLD_IPS = [bytes([65,108,99,34]), bytes([0,0,0,0]), bytes([127,0,0,1])]
+          OLD_PORTS = [struct.pack('<H',2369), struct.pack('<H',7777), struct.pack('<H',0)]
+          for filename in os.listdir(SO_DIR):
+              if not filename.endswith('.so'): continue
+              filepath = os.path.join(SO_DIR, filename)
+              with open(filepath, 'rb') as f: data = bytearray(f.read())
+              if OLD_PACKAGE in data: data = data.replace(OLD_PACKAGE, NEW_PACKAGE); print(f"  {filename}: Package name patched")
+              for old_ip in OLD_IPS:
+                  count = data.count(old_ip)
+                  if count > 0: data = data.replace(old_ip, NEW_IP); print(f"  {filename}: IP patched ({count}x)")
+              for old_port in OLD_PORTS:
+                  count = data.count(old_port)
+                  if count > 0: data = data.replace(old_port, NEW_PORT); print(f"  {filename}: Port patched ({count}x)")
+              with open(filepath, 'wb') as f: f.write(data)
+          PYEOF
 
       - name: Patch .so binaries
         run: python3 patch_so.py
@@ -103,8 +144,9 @@ jobs:
         run: |
           chmod +x ./gradlew
           ./gradlew clean assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log
-          echo "=== APK FILES ==="
-          find app/build/outputs -name "*.apk" -type f
+          echo "=== SEARCHING FOR APK ==="
+          find app/build -name "*.apk" -type f 2>/dev/null || echo "No APK found in app/build"
+          find . -name "*.apk" -type f 2>/dev/null || echo "No APK found anywhere"
 
       - name: Upload build log
         if: always()
@@ -118,8 +160,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: sahil-rp-release
-          path: |
-            app/build/outputs/apk/**/*.apk
-            app/build/outputs/apk/*/*.apk
-            app/build/outputs/apk/*/*/*.apk
+          path: app/build/outputs/apk/**/*.apk
           if-no-files-found: warn
