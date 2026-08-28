@@ -1,4 +1,4 @@
-name: Build Sahil RP with Custom libGTASA.so
+name: Build MATRESHKARP (Stable)
 
 on:
   workflow_dispatch:
@@ -16,121 +16,24 @@ jobs:
       - name: Checkout your repo
         uses: actions/checkout@v4
 
-      # ── CLONE Ocasa1050 SOURCE CODE ──
-      - name: Clone Ocasa1050 C++ source
+      # ── DON'T CHANGE applicationId or package names! ──
+      - name: Fix build.gradle ONLY (remove suffix + fix ABI)
         run: |
-          git clone --depth 1 https://github.com/Ocasa1050/2.2-MATRESHKARP-2.1-GTASA-64x.git /tmp/ocasa-source
-
-      # ── MODIFY C++ SOURCE TO USE INTERNAL PATH ──
-      - name: Modify C++ source for internal path
-        run: |
-          echo "=== MODIFYING C++ SOURCE ==="
-          
-          # Find where g_pszStorage is set
-          grep -rn "g_pszStorage" /tmp/ocasa-source/app/src/main/cpp/ || true
-          
-          # Modify main.cpp to set g_pszStorage to internal path
-          cat > /tmp/patch_storage.py << 'PYEOF'
-          import os
-          
-          # Find all .cpp files
-          for root, dirs, files in os.walk('/tmp/ocasa-source/app/src/main/cpp/'):
-              for file in files:
-                  if file.endswith('.cpp'):
-                      filepath = os.path.join(root, file)
-                      with open(filepath, 'r') as f:
-                          content = f.read()
-                      
-                      # Replace external storage path with internal
-                      content = content.replace(
-                          'char* g_pszStorage = nullptr;',
-                          'char* g_pszStorage = (char*)"/data/data/com.Sahil.RP/files/LUXRUSSIA/";'
-                      )
-                      
-                      with open(filepath, 'w') as f:
-                          f.write(content)
-          
-          print("C++ source patched for internal storage")
-          PYEOF
-          
-          python3 /tmp/patch_storage.py
-
-      # ── SETUP ANDROID NDK ──
-      - name: Setup Android NDK
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake ninja-build
-          sdkmanager "ndk;25.2.9519653"
-
-      # ── BUILD libGTASA.so FROM SOURCE ──
-      - name: Build libGTASA.so from source
-        run: |
-          cd /tmp/ocasa-source/app/src/main/cpp
-          mkdir -p build
-          cd build
-          
-          cmake .. \
-            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
-            -DANDROID_ABI=armeabi-v7a \
-            -DANDROID_PLATFORM=android-21 \
-            -DCMAKE_BUILD_TYPE=Release
-          
-          make -j$(nproc)
-          
-          # Copy built library
-          cp build/libGTASA.so $GITHUB_WORKSPACE/app/src/main/jniLibs/armeabi-v7a/
-          cp build/libsamp.so $GITHUB_WORKSPACE/app/src/main/jniLibs/armeabi-v7a/
-          echo "libGTASA.so built from source with internal path"
-
-      # ── FIX build.gradle ──
-      - name: Fix build.gradle
-        run: |
-          sed -i "s/applicationId 'com\\.parad1stgames\\.game'/applicationId 'com.Sahil.RP'/g" app/build.gradle
-          sed -i "s/namespace 'com\\.parad1stgames\\.game'/namespace 'com.Sahil.RP'/g" app/build.gradle
           sed -i '/applicationIdSuffix/d' app/build.gradle
           sed -i "s/abiFilters 'armeabi-v7a', 'arm64-v8a'/abiFilters 'armeabi-v7a'/g" app/build.gradle
 
-      - name: Fix AndroidManifest.xml
+      - name: Fix AndroidManifest.xml (add permission only)
         run: |
-          sed -i 's/package="com\.parad1stgames\.game"/package="com.Sahil.RP"/g' app/src/main/AndroidManifest.xml
+          sed -i 's|<uses-permission android:name="android.permission.RECORD_AUDIO" />|<uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />|g' app/src/main/AndroidManifest.xml
 
-      - name: Fix NvEventQueueActivity
+      - name: Fix NvEventQueueActivity launcher reference
         run: |
-          sed -i 's/com\.blackrussia\.launcher/com.Sahil.RP/g' app/src/main/java/com/nvidia/devtech/NvEventQueueActivity.java
-
-      - name: Fix Java files to use internal path
-        run: |
-          python3 << 'EOF'
-          import os
-          
-          def fix_file(path, replacements):
-              with open(path, 'r') as f:
-                  content = f.read()
-              for old, new in replacements:
-                  if old in content:
-                      content = content.replace(old, new)
-                      print(f"  FIXED: {path}")
-              with open(path, 'w') as f:
-                  f.write(content)
-          
-          fix_file('app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java', [
-              ('return new File(getExternalFilesDir(null), "LUXRUSSIA");', 'return new File(getFilesDir(), "LUXRUSSIA");'),
-              ('return new File(getGameDir(), "SAMP/settings.ini");', 'return new File(getFilesDir(), "LUXRUSSIA/SAMP/settings.ini");'),
-              ('return new File(getGameDir(), "texdb/gta3.img");', 'return new File(getFilesDir(), "LUXRUSSIA/texdb/gta3.img");'),
-          ])
-          
-          fix_file('app/src/main/java/com/Parad1st/launcher/activity/LoaderActivity.java', [
-              ('return new File(getExternalFilesDir(null), "LUXRUSSIA");', 'return new File(getFilesDir(), "LUXRUSSIA");'),
-              ('folder = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);', 'folder = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);'),
-              ('new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "black-cache.7z").getAbsolutePath()', 'new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "black-cache.7z").getAbsolutePath()'),
-              ('String mOutputPath = getGameDir().getAbsolutePath();', 'String mOutputPath = getFilesDir().getAbsolutePath() + "/LUXRUSSIA";'),
-          ])
-          EOF
+          sed -i 's|"com.blackrussia.launcher"|"com.byparad1st.game"|g' app/src/main/java/com/nvidia/devtech/NvEventQueueActivity.java
 
       - name: Create local server files
         run: |
           mkdir -p app/src/main/assets
-          echo '[{"color":"FF0000","dopname":"SAHIL RP","maxonline":1000,"name":"SAHIL","online":0}]' > app/src/main/assets/server.json
+          echo '[{"color":"FF0000","dopname":"MATRESHKA RP","maxonline":1000,"name":"MATRESHKA","online":0}]' > app/src/main/assets/server.json
           echo '[]' > app/src/main/assets/stories.json
 
       - name: Patch Interface.java
@@ -141,17 +44,40 @@ jobs:
             sed -i 's|https://raw.githubusercontent.com/Parad1st/Black-Russia-Source/main/Json%20files/stories.json|file:///android_asset/stories.json|g' "$INTERFACE"
           fi
 
-      - name: Download other .so files
+      - name: Download .so files
         run: |
           SO_DIR="app/src/main/jniLibs/armeabi-v7a"
           mkdir -p "$SO_DIR"
           BASE="https://raw.githubusercontent.com/Parad1st/Black-Russia-Source/main/app/src/main/jniLibs/armeabi-v7a"
-          for f in libImmEmulatorJ.so libSCAnd.so libbass.so libparad1st.so libsampvoice.so; do
+          for f in libGTASA.so libImmEmulatorJ.so libSCAnd.so libbass.so libparad1st.so libsampvoice.so; do
             curl -sL "$BASE/$f" -o "$SO_DIR/$f"
             SIZE=$(stat -c%s "$SO_DIR/$f" 2>/dev/null || echo 0)
             if [ "$SIZE" -lt 1000 ]; then echo "ERROR: $f"; exit 1; fi
-            echo "$f OK"
+            echo "$f OK ($SIZE bytes)"
           done
+          rm -rf app/src/main/jniLibs/arm64-v8a app/src/main/jniLibs/x86 app/src/main/jniLibs/x86_64
+
+      - name: Patch .so binaries (IP + PORT ONLY)
+        run: |
+          python3 << 'PYEOF'
+          import os, struct
+          SO_DIR = 'app/src/main/jniLibs/armeabi-v7a'
+          NEW_IP = bytes([94, 23, 168, 153])
+          NEW_PORT = struct.pack('<H', 2144)
+          OLD_IPS = [bytes([65,108,99,34]), bytes([0,0,0,0]), bytes([127,0,0,1])]
+          OLD_PORTS = [struct.pack('<H',2369), struct.pack('<H',7777), struct.pack('<H',0)]
+          for filename in os.listdir(SO_DIR):
+              if not filename.endswith('.so'): continue
+              filepath = os.path.join(SO_DIR, filename)
+              with open(filepath, 'rb') as f: data = bytearray(f.read())
+              for old_ip in OLD_IPS:
+                  count = data.count(old_ip)
+                  if count > 0: data = data.replace(old_ip, NEW_IP); print(f"  {filename}: IP patched ({count}x)")
+              for old_port in OLD_PORTS:
+                  count = data.count(old_port)
+                  if count > 0: data = data.replace(old_port, NEW_PORT); print(f"  {filename}: Port patched ({count}x)")
+              with open(filepath, 'wb') as f: f.write(data)
+          PYEOF
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -189,6 +115,6 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: sahil-rp-apk
+          name: matreshka-release
           path: app/build/outputs/apk/**/*.apk
-          if-no-files-found: warn
+          if-no-files-found: warn٧
