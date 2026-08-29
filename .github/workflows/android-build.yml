@@ -1,4 +1,4 @@
-name: Build MATRESHKARP (Final Fix)
+name: Build MATRESHKARP
 
 on:
   workflow_dispatch:
@@ -29,147 +29,70 @@ jobs:
         run: |
           sed -i 's|"com.blackrussia.launcher"|"com.byparad1st.game"|g' app/src/main/java/com/nvidia/devtech/NvEventQueueActivity.java
 
-      # ── PYTHON FIX: Reliable path replacement with verification ──
-      - name: Fix Java files to use EXTERNAL storage (VERIFIED)
+      # ── FIX: Replace entire getGameDir() methods with external path ──
+      - name: Fix getGameDir() in MainActivity.java
         run: |
-          python3 << 'PYEOF'
-          import re
+          python3 << 'EOF'
+          with open('app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java', 'r') as f:
+              content = f.read()
           
-          def fix_main_activity():
-              with open('app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java', 'r') as f:
-                  content = f.read()
-              
-              # Replace getGameDir() method to use external storage
-              old_getGameDir = 'private File getGameDir() {\n\t\treturn new File(getExternalFilesDir(null), "LUXRUSSIA");\n\t}'
-              new_getGameDir = 'private File getGameDir() {\n\t\treturn new File(Environment.getExternalStorageDirectory(), "LUXRUSSIA");\n\t}'
-              
-              if old_getGameDir in content:
-                  content = content.replace(old_getGameDir, new_getGameDir)
-                  print("✅ FIXED: getGameDir() uses ExternalStorageDirectory")
-              else:
-                  print("❌ NOT FOUND: getGameDir() pattern")
-                  # Try alternative pattern
-                  content = re.sub(
-                      r'private File getGameDir\(\) \{\s*return new File\(getExternalFilesDir\(null\), "LUXRUSSIA"\);\s*\}',
-                      'private File getGameDir() {\n\t\treturn new File(Environment.getExternalStorageDirectory(), "LUXRUSSIA");\n\t}',
-                      content
-                  )
-                  print("✅ FIXED (regex): getGameDir() uses ExternalStorageDirectory")
-              
-              # Replace getSettingsFile()
-              old_settings = 'return new File(getGameDir(), "SAMP/settings.ini");'
-              new_settings = 'return new File(Environment.getExternalStorageDirectory(), "LUXRUSSIA/SAMP/settings.ini");'
-              
-              if old_settings in content:
-                  content = content.replace(old_settings, new_settings)
-                  print("✅ FIXED: getSettingsFile() uses external path")
-              else:
-                  print("❌ NOT FOUND: getSettingsFile() pattern")
-              
-              # Replace getGameCheckFile()
-              old_check = 'return new File(getGameDir(), "texdb/gta3.img");'
-              new_check = 'return new File(Environment.getExternalStorageDirectory(), "LUXRUSSIA/texdb/gta3.img");'
-              
-              if old_check in content:
-                  content = content.replace(old_check, new_check)
-                  print("✅ FIXED: getGameCheckFile() uses external path")
-              else:
-                  print("❌ NOT FOUND: getGameCheckFile() pattern")
-              
-              with open('app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java', 'w') as f:
-                  f.write(content)
+          # Replace getGameDir() method body
+          old = '''private File getGameDir() {
+		return new File(getExternalFilesDir(null), "LUXRUSSIA");
+	}'''
+          new = '''private File getGameDir() {
+		return new File(Environment.getExternalStorageDirectory(), "LUXRUSSIA");
+	}'''
           
-          def fix_loader_activity():
-              with open('app/src/main/java/com/Parad1st/launcher/activity/LoaderActivity.java', 'r') as f:
-                  content = f.read()
-              
-              # Replace getGameDir()
-              old_getGameDir = 'private File getGameDir() {\n\t\treturn new File(getExternalFilesDir(null), "LUXRUSSIA");\n\t}'
-              new_getGameDir = 'private File getGameDir() {\n\t\treturn new File(Environment.getExternalStorageDirectory(), "LUXRUSSIA");\n\t}'
-              
-              if old_getGameDir in content:
-                  content = content.replace(old_getGameDir, new_getGameDir)
-                  print("✅ FIXED: LoaderActivity getGameDir() uses ExternalStorageDirectory")
-              else:
-                  print("❌ NOT FOUND: LoaderActivity getGameDir() pattern")
-                  # Try regex
-                  content = re.sub(
-                      r'private File getGameDir\(\) \{\s*return new File\(getExternalFilesDir\(null\), "LUXRUSSIA"\);\s*\}',
-                      'private File getGameDir() {\n\t\treturn new File(Environment.getExternalStorageDirectory(), "LUXRUSSIA");\n\t}',
-                      content
-                  )
-                  print("✅ FIXED (regex): LoaderActivity getGameDir() uses ExternalStorageDirectory")
-              
-              # Replace folder assignment
-              old_folder = 'folder = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);'
-              new_folder = 'folder = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);'
-              
-              if old_folder in content:
-                  content = content.replace(old_folder, new_folder)
-                  print("✅ FIXED: folder uses ExternalStoragePublicDirectory")
-              else:
-                  print("❌ NOT FOUND: folder pattern")
-              
-              # Replace mInputFilePath
-              old_input = 'new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "black-cache.7z").getAbsolutePath()'
-              new_input = 'new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "black-cache.7z").getAbsolutePath()'
-              
-              if old_input in content:
-                  content = content.replace(old_input, new_input)
-                  print("✅ FIXED: mInputFilePath uses external path")
-              else:
-                  print("❌ NOT FOUND: mInputFilePath pattern")
-              
-              # Replace mOutputPath
-              old_output = 'String mOutputPath = getGameDir().getAbsolutePath();'
-              new_output = 'String mOutputPath = Environment.getExternalStorageDirectory().getAbsolutePath();'
-              
-              if old_output in content:
-                  content = content.replace(old_output, new_output)
-                  print("✅ FIXED: mOutputPath uses external path")
-              else:
-                  print("❌ NOT FOUND: mOutputPath pattern")
-              
-              # Replace Utils.delete for .7z
-              old_delete1 = 'Utils.delete(new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "black-cache.7z"));'
-              new_delete1 = 'Utils.delete(new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "black-cache.7z"));'
-              
-              if old_delete1 in content:
-                  content = content.replace(old_delete1, new_delete1)
-                  print("✅ FIXED: delete .7z uses external path")
-              else:
-                  print("❌ NOT FOUND: delete .7z pattern")
-              
-              # Replace Utils.delete for .temp
-              old_delete2 = 'Utils.delete(new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "black-cache.7z.temp"));'
-              new_delete2 = 'Utils.delete(new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "black-cache.7z.temp"));'
-              
-              if old_delete2 in content:
-                  content = content.replace(old_delete2, new_delete2)
-                  print("✅ FIXED: delete .temp uses external path")
-              else:
-                  print("❌ NOT FOUND: delete .temp pattern")
-              
-              with open('app/src/main/java/com/Parad1st/launcher/activity/LoaderActivity.java', 'w') as f:
-                  f.write(content)
+          if old in content:
+              content = content.replace(old, new)
+              print("✅ FIXED: MainActivity getGameDir()")
+          else:
+              print("❌ NOT FOUND: MainActivity getGameDir()")
+              print("Searching for pattern...")
+              import re
+              match = re.search(r'private File getGameDir\(\) \{[^}]+\}', content)
+              if match:
+                  print(f"Found: {match.group()}")
           
-          print("=== FIXING MainActivity.java ===")
-          fix_main_activity()
-          print("\n=== FIXING LoaderActivity.java ===")
-          fix_loader_activity()
-          print("\n=== DONE ===")
-          PYEOF
+          with open('app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java', 'w') as f:
+              f.write(content)
+          EOF
 
-      - name: Verify Java files were fixed
+      - name: Fix getGameDir() in LoaderActivity.java
         run: |
-          echo "=== MainActivity.java getGameDir() ==="
-          grep -A2 "private File getGameDir()" app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java || echo "NOT FOUND"
-          echo "=== MainActivity.java getSettingsFile() ==="
-          grep "SAMP/settings.ini" app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java || echo "NOT FOUND"
-          echo "=== LoaderActivity.java getGameDir() ==="
-          grep -A2 "private File getGameDir()" app/src/main/java/com/Parad1st/launcher/activity/LoaderActivity.java || echo "NOT FOUND"
-          echo "=== LoaderActivity.java folder ==="
-          grep "folder =" app/src/main/java/com/Parad1st/launcher/activity/LoaderActivity.java || echo "NOT FOUND"
+          python3 << 'EOF'
+          with open('app/src/main/java/com/Parad1st/launcher/activity/LoaderActivity.java', 'r') as f:
+              content = f.read()
+          
+          # Replace getGameDir() method body
+          old = '''private File getGameDir() {
+		return new File(getExternalFilesDir(null), "LUXRUSSIA");
+	}'''
+          new = '''private File getGameDir() {
+		return new File(Environment.getExternalStorageDirectory(), "LUXRUSSIA");
+	}'''
+          
+          if old in content:
+              content = content.replace(old, new)
+              print("✅ FIXED: LoaderActivity getGameDir()")
+          else:
+              print("❌ NOT FOUND: LoaderActivity getGameDir()")
+              import re
+              match = re.search(r'private File getGameDir\(\) \{[^}]+\}', content)
+              if match:
+                  print(f"Found: {match.group()}")
+          
+          with open('app/src/main/java/com/Parad1st/launcher/activity/LoaderActivity.java', 'w') as f:
+              f.write(content)
+          EOF
+
+      - name: Verify fixes
+        run: |
+          echo "=== MainActivity getGameDir() ==="
+          grep -A2 "private File getGameDir()" app/src/main/java/com/Parad1st/launcher/activity/MainActivity.java
+          echo "=== LoaderActivity getGameDir() ==="
+          grep -A2 "private File getGameDir()" app/src/main/java/com/Parad1st/launcher/activity/LoaderActivity.java
 
       - name: Create local server files
         run: |
@@ -258,4 +181,4 @@ jobs:
         with:
           name: matreshka-release
           path: app/build/outputs/apk/**/*.apk
-          if-no-files-found: warn١
+          if-no-files-found: warn
